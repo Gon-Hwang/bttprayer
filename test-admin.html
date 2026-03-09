@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>관리자 테스트</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .info-box {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .success {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            background: #7c6fd6;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #6858c5;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🙏 관리자 로그인 테스트</h1>
+    
+    <div class="info-box">
+        <h2>현재 로그인 상태</h2>
+        <div id="loginStatus">확인 중...</div>
+    </div>
+    
+    <div class="info-box">
+        <h2>관리자 권한</h2>
+        <div id="adminStatus">확인 중...</div>
+    </div>
+    
+    <div class="info-box">
+        <h2>수동 로그인 테스트</h2>
+        <p>관리자 이메일로 수동 로그인을 테스트합니다.</p>
+        <input type="email" id="testEmail" placeholder="yeonchoi08@gmail.com" style="padding: 10px; width: 300px; border: 1px solid #ddd; border-radius: 5px;">
+        <button onclick="testManualLogin()">수동 로그인 테스트</button>
+        <div id="loginTestResult" style="margin-top: 10px;"></div>
+    </div>
+    
+    <div class="info-box">
+        <h2>API 테스트</h2>
+        <button onclick="testMembersAPI()">회원 목록 API 테스트</button>
+        <button onclick="testPrayersAPI()">기도 제목 API 테스트</button>
+        <button onclick="clearStorage()">로컬스토리지 초기화</button>
+        <div id="apiResult" style="margin-top: 10px;"></div>
+    </div>
+    
+    <div class="info-box">
+        <h2>LocalStorage 내용</h2>
+        <pre id="storageContent"></pre>
+    </div>
+
+    <script>
+        // 현재 사용자 확인
+        function checkCurrentUser() {
+            const savedUser = localStorage.getItem('currentUser');
+            const loginStatusDiv = document.getElementById('loginStatus');
+            const adminStatusDiv = document.getElementById('adminStatus');
+            
+            if (savedUser) {
+                const user = JSON.parse(savedUser);
+                loginStatusDiv.innerHTML = `
+                    <p class="success">✅ 로그인됨</p>
+                    <p><strong>이름:</strong> ${user.name}</p>
+                    <p><strong>이메일:</strong> ${user.email}</p>
+                    <p><strong>기본 관리자:</strong> ${user.isDefaultAdmin ? '예' : '아니오'}</p>
+                `;
+                
+                const isAdmin = user.email === 'yeonchoi08@gmail.com' || 
+                               user.name === '최지연' || 
+                               user.isAdmin === true ||
+                               user.isDefaultAdmin === true;
+                
+                adminStatusDiv.innerHTML = isAdmin 
+                    ? '<p class="success">✅ 관리자 권한 있음</p>'
+                    : '<p class="error">❌ 관리자 권한 없음</p>';
+            } else {
+                loginStatusDiv.innerHTML = '<p class="error">❌ 로그인되지 않음</p>';
+                adminStatusDiv.innerHTML = '<p class="error">❌ 관리자 권한 없음</p>';
+            }
+            
+            // LocalStorage 내용 표시
+            const storageDiv = document.getElementById('storageContent');
+            storageDiv.textContent = JSON.stringify({
+                currentUser: savedUser ? JSON.parse(savedUser) : null,
+                preferredLanguage: localStorage.getItem('preferredLanguage'),
+                prayedItems: localStorage.getItem('prayedItems'),
+                likedTestimonies: localStorage.getItem('likedTestimonies')
+            }, null, 2);
+        }
+        
+        // 회원 API 테스트
+        async function testMembersAPI() {
+            const resultDiv = document.getElementById('apiResult');
+            resultDiv.innerHTML = '<p>테스트 중...</p>';
+            
+            try {
+                const response = await fetch('tables/members?limit=10');
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <p class="success">✅ API 호출 성공</p>
+                    <p><strong>회원 수:</strong> ${data.data ? data.data.length : 0}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <p class="error">❌ API 호출 실패</p>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+        
+        // 기도 제목 API 테스트
+        async function testPrayersAPI() {
+            const resultDiv = document.getElementById('apiResult');
+            resultDiv.innerHTML = '<p>테스트 중...</p>';
+            
+            try {
+                const response = await fetch('tables/prayers?limit=10');
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <p class="success">✅ API 호출 성공</p>
+                    <p><strong>기도 제목 수:</strong> ${data.data ? data.data.length : 0}</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <p class="error">❌ API 호출 실패</p>
+                    <p>${error.message}</p>
+                `;
+            }
+        }
+        
+        // 로컬스토리지 초기화
+        function clearStorage() {
+            if (confirm('로컬스토리지를 초기화하시겠습니까?')) {
+                localStorage.clear();
+                alert('초기화 완료! 페이지를 새로고침합니다.');
+                location.reload();
+            }
+        }
+        
+        // 수동 로그인 테스트
+        function testManualLogin() {
+            const email = document.getElementById('testEmail').value.trim();
+            const resultDiv = document.getElementById('loginTestResult');
+            
+            if (!email) {
+                resultDiv.innerHTML = '<p class="error">❌ 이메일을 입력해주세요</p>';
+                return;
+            }
+            
+            // 관리자 이메일 확인
+            if (email.toLowerCase() === 'yeonchoi08@gmail.com') {
+                const defaultAdmin = {
+                    id: 'default-admin',
+                    name: '최지연',
+                    email: 'yeonchoi08@gmail.com',
+                    gender: 'female',
+                    phone: '',
+                    church: '',
+                    isAdmin: true,
+                    isDefaultAdmin: true
+                };
+                
+                localStorage.setItem('currentUser', JSON.stringify(defaultAdmin));
+                
+                resultDiv.innerHTML = `
+                    <p class="success">✅ 관리자 로그인 성공!</p>
+                    <p>페이지를 새로고침하여 변경사항을 확인하세요.</p>
+                    <button onclick="location.reload()">새로고침</button>
+                `;
+            } else {
+                resultDiv.innerHTML = '<p class="error">❌ 관리자 이메일이 아닙니다</p>';
+            }
+        }
+        
+        // 페이지 로드 시 실행
+        checkCurrentUser();
+    </script>
+</body>
+</html>

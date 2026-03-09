@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>일정 수정 기능 테스트</title>
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c4563;
+            border-bottom: 3px solid #7c6fd6;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #7c6fd6;
+            margin-top: 30px;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            font-weight: 600;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background: linear-gradient(135deg, #ffa751 0%, #ffe259 100%);
+            color: #2c4563;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            margin: 10px 5px;
+            transition: all 0.3s ease;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(255, 167, 81, 0.4);
+        }
+        .code {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #7c6fd6;
+            margin: 15px 0;
+            font-family: monospace;
+            overflow-x: auto;
+        }
+        #logOutput {
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .log-entry {
+            margin: 5px 0;
+        }
+        .log-error {
+            color: #ff6b6b;
+        }
+        .log-success {
+            color: #51cf66;
+        }
+        .log-info {
+            color: #339af0;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-section">
+        <h1>🧪 일정 수정 기능 테스트</h1>
+        
+        <div class="status info">
+            <strong>테스트 목적:</strong> 관리자가 로그인하여 일정 수정 버튼을 클릭하고 모달이 정상적으로 열리는지 확인
+        </div>
+        
+        <h2>1단계: 관리자 로그인 시뮬레이션</h2>
+        <p>관리자로 자동 로그인합니다.</p>
+        <button onclick="simulateAdminLogin()">관리자 로그인</button>
+        <div id="loginStatus" class="status" style="display:none;"></div>
+        
+        <h2>2단계: 일정 수정 버튼 테스트</h2>
+        <p>버튼이 표시되고 클릭이 가능한지 확인합니다.</p>
+        <button onclick="testScheduleButton()">버튼 상태 확인</button>
+        <button onclick="openTestModal()">모달 열기 테스트</button>
+        <div id="buttonStatus" class="status" style="display:none;"></div>
+        
+        <h2>3단계: 실제 페이지로 이동</h2>
+        <p>로그인 상태로 메인 페이지로 이동합니다.</p>
+        <button onclick="goToMainPage()">메인 페이지로 이동</button>
+        
+        <h2>📊 테스트 로그</h2>
+        <button onclick="clearLog()">로그 지우기</button>
+        <div id="logOutput"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logOutput = document.getElementById('logOutput');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logOutput.appendChild(entry);
+            logOutput.scrollTop = logOutput.scrollHeight;
+            console.log(message);
+        }
+
+        function clearLog() {
+            document.getElementById('logOutput').innerHTML = '';
+            log('로그가 지워졌습니다.', 'info');
+        }
+
+        function simulateAdminLogin() {
+            log('관리자 로그인 시도...', 'info');
+            
+            const adminUser = {
+                name: '최지연',
+                email: 'yeonchoi08@gmail.com',
+                isAdmin: true,
+                isDefaultAdmin: true,
+                phone: '010-0000-0000',
+                gender: 'female',
+                church: 'BTT MINISTRY'
+            };
+            
+            localStorage.setItem('currentUser', JSON.stringify(adminUser));
+            
+            const loginStatus = document.getElementById('loginStatus');
+            loginStatus.style.display = 'block';
+            loginStatus.className = 'status success';
+            loginStatus.innerHTML = '✅ 관리자 로그인 성공!<br>이름: 최지연<br>이메일: yeonchoi08@gmail.com';
+            
+            log('✅ localStorage에 관리자 정보 저장 완료', 'success');
+            log(`저장된 데이터: ${JSON.stringify(adminUser, null, 2)}`, 'info');
+        }
+
+        function testScheduleButton() {
+            log('버튼 상태 확인 중...', 'info');
+            
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            const buttonStatus = document.getElementById('buttonStatus');
+            buttonStatus.style.display = 'block';
+            
+            if (!currentUser) {
+                buttonStatus.className = 'status error';
+                buttonStatus.textContent = '❌ 로그인되지 않았습니다. 먼저 관리자 로그인을 해주세요.';
+                log('❌ currentUser가 localStorage에 없습니다.', 'error');
+                return;
+            }
+            
+            log(`✅ currentUser 확인: ${currentUser.name}`, 'success');
+            log(`관리자 권한: ${currentUser.isAdmin}`, 'info');
+            
+            if (currentUser.isAdmin) {
+                buttonStatus.className = 'status success';
+                buttonStatus.innerHTML = '✅ 관리자 권한 확인됨!<br>메인 페이지에서 "일정 수정하기" 버튼이 표시되어야 합니다.';
+                log('✅ 관리자 권한 확인 완료', 'success');
+            } else {
+                buttonStatus.className = 'status error';
+                buttonStatus.textContent = '❌ 관리자 권한이 없습니다.';
+                log('❌ 관리자 권한 없음', 'error');
+            }
+        }
+
+        function openTestModal() {
+            log('모달 열기 테스트...', 'info');
+            alert('✅ JavaScript 이벤트가 정상 작동합니다!\n\n실제 모달은 메인 페이지(index.html)에서 확인하세요.');
+            log('✅ 이벤트 핸들러 정상 작동', 'success');
+        }
+
+        function goToMainPage() {
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            
+            if (!currentUser) {
+                alert('먼저 관리자 로그인을 해주세요.');
+                log('❌ 로그인하지 않아 메인 페이지로 이동 불가', 'error');
+                return;
+            }
+            
+            log('메인 페이지로 이동 중...', 'info');
+            log('📍 index.html로 리다이렉트', 'success');
+            
+            // 메인 페이지로 이동
+            setTimeout(() => {
+                window.location.href = 'index.html#schedule';
+            }, 1000);
+        }
+
+        // 페이지 로드 시 자동 확인
+        window.addEventListener('DOMContentLoaded', () => {
+            log('=== 일정 수정 기능 테스트 페이지 로드 ===', 'success');
+            log('테스트 순서:', 'info');
+            log('1. "관리자 로그인" 버튼 클릭', 'info');
+            log('2. "버튼 상태 확인" 버튼 클릭', 'info');
+            log('3. "메인 페이지로 이동" 버튼 클릭', 'info');
+            log('4. 메인 페이지에서 "모임일정" 섹션으로 이동', 'info');
+            log('5. "일정 수정하기" 버튼 확인 및 클릭', 'info');
+            
+            // 이미 로그인된 경우 확인
+            const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+            if (currentUser) {
+                log(`ℹ️ 이미 로그인되어 있습니다: ${currentUser.name}`, 'info');
+            } else {
+                log('ℹ️ 로그인되지 않았습니다.', 'info');
+            }
+        });
+    </script>
+</body>
+</html>

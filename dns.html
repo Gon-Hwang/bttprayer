@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNS 설정 관리</title>
+    <link rel="stylesheet" href="css/dns.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>DNS 설정</h1>
+        </header>
+
+        <main>
+            <!-- DNS 레코드 추가 폼 -->
+            <div class="dns-form-section">
+                <table class="dns-form-table">
+                    <thead>
+                        <tr>
+                            <th>타입 <span class="info-icon">ⓘ</span></th>
+                            <th>호스트</th>
+                            <th>값/위치</th>
+                            <th>TTL</th>
+                            <th>우선순위</th>
+                            <th>서비스</th>
+                            <th>상태</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="form-row">
+                            <td>
+                                <select id="recordType" class="form-select">
+                                    <option value="CNAME">CNAME</option>
+                                    <option value="A">A</option>
+                                    <option value="AAAA">AAAA</option>
+                                    <option value="MX">MX</option>
+                                    <option value="TXT">TXT</option>
+                                    <option value="NS">NS</option>
+                                    <option value="SRV">SRV</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input 
+                                    type="text" 
+                                    id="recordHost" 
+                                    class="form-input" 
+                                    placeholder="예: @"
+                                >
+                            </td>
+                            <td>
+                                <input 
+                                    type="text" 
+                                    id="recordValue" 
+                                    class="form-input" 
+                                    placeholder="값 / 위치"
+                                >
+                            </td>
+                            <td>
+                                <select id="recordTTL" class="form-select">
+                                    <option value="300">300</option>
+                                    <option value="600" selected>600</option>
+                                    <option value="1800">1800</option>
+                                    <option value="3600">3600</option>
+                                    <option value="86400">86400</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input 
+                                    type="number" 
+                                    id="recordPriority" 
+                                    class="form-input" 
+                                    placeholder="-"
+                                    min="0"
+                                >
+                            </td>
+                            <td>
+                                <select id="recordService" class="form-select">
+                                    <option value="">서비스</option>
+                                    <option value="DNS 설정">DNS 설정</option>
+                                    <option value="메일">메일</option>
+                                    <option value="웹">웹</option>
+                                </select>
+                            </td>
+                            <td>
+                                <select id="recordStatus" class="form-select">
+                                    <option value="활성">활성</option>
+                                    <option value="비활성">비활성</option>
+                                </select>
+                            </td>
+                            <td>
+                                <button class="btn-confirm" onclick="addRecord()">확인</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- DNS 레코드 목록 -->
+            <div class="dns-list-section">
+                <h2>등록된 DNS 레코드</h2>
+                <div class="table-wrapper">
+                    <table class="dns-list-table">
+                        <thead>
+                            <tr>
+                                <th>타입</th>
+                                <th>호스트</th>
+                                <th>값/위치</th>
+                                <th>TTL</th>
+                                <th>우선순위</th>
+                                <th>서비스</th>
+                                <th>상태</th>
+                                <th>작업</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recordsList">
+                            <!-- 동적으로 레코드가 추가됩니다 -->
+                            <tr class="empty-state">
+                                <td colspan="8">등록된 DNS 레코드가 없습니다. 위 폼을 사용하여 레코드를 추가해주세요.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 알림 메시지 -->
+            <div id="notification" class="notification hidden"></div>
+        </main>
+    </div>
+
+    <script src="js/dns.js"></script>
+</body>
+</html>

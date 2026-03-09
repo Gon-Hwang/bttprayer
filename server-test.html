@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>서버 확인 테스트</title>
+</head>
+<body>
+    <h1>🔍 서버 확인 테스트</h1>
+    <p>이 페이지는 서버 연결 테스트용입니다.</p>
+    <p><strong>타임스탬프:</strong> <span id="timestamp"></span></p>
+    <p><strong>현재 URL:</strong> <span id="currentUrl"></span></p>
+    
+    <script>
+        document.getElementById('timestamp').textContent = new Date().toISOString();
+        document.getElementById('currentUrl').textContent = window.location.href;
+    </script>
+</body>
+</html>

@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>보좌 앞에서</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="stylesheet" href="css/style.css?v=2026021701">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- 헤더 -->
+    <header>
+        <nav class="navbar">
+            <div class="container">
+                <!-- 첫 번째 줄: 로고 + 사용자 정보 + 언어 선택 -->
+                <div class="navbar-row">
+                    <div class="logo">
+                        <img src="images/logo-new.png" alt="BTT Ministry Logo" class="logo-image">
+                        <div class="logo-text">
+                            <h1 id="logoTitle">보좌 앞에서</h1>
+                            <span class="logo-subtitle">BTT MINISTRY</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 우측 영역: 사용자 정보 + 언어 선택 -->
+                    <div class="navbar-right">
+                        <div class="user-info" id="userInfo" style="display:none;">
+                            <span class="welcome-text">환영합니다, <strong id="userName"></strong>님</span>
+                            <span class="admin-badge-group" id="adminBadge" style="display:none;">
+                                <span class="admin-badge">🙏 기도인도자</span>
+                                <span class="admin-badge">👑 관리자</span>
+                            </span>
+                            <button class="logout-btn" onclick="handleLogout()">로그아웃</button>
+                        </div>
+                        
+                        <!-- 언어 전환 버튼 -->
+                        <div class="language-switcher">
+                            <button class="lang-btn active" data-lang="ko" onclick="switchLanguage('ko')">
+                                한
+                            </button>
+                            <button class="lang-btn" data-lang="en" onclick="switchLanguage('en')">
+                                E
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- 햄버거 메뉴 버튼 (모바일 전용) -->
+                    <button class="hamburger-menu" id="hamburgerMenu" type="button" aria-label="메뉴">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </button>
+                </div>
+                
+                <!-- 두 번째 줄: 메뉴 -->
+                <div class="navbar-row">
+                    <ul class="nav-menu" id="navMenu">
+                        <li><a href="#home" class="nav-link active" id="navHome">홈</a></li>
+                        <li><a href="#about" class="nav-link" id="navAbout">소개</a></li>
+                        <li><a href="#schedule" class="nav-link" id="navSchedule">모임일정</a></li>
+                        <li><a href="#register" class="nav-link" id="navRegister">회원가입</a></li>
+                        <li><a href="#login" class="nav-link" id="navLogin">로그인</a></li>
+                        <li><a href="#prayers" class="nav-link" id="navPrayers" style="display:none;">기도제목</a></li>
+                        <li><a href="#testimonies" class="nav-link" id="navTestimonies" style="display:none;">간증</a></li>
+                        <li><a href="#notices" class="nav-link" id="navNotices" style="display:none;">공지사항</a></li>
+                        <li><a href="#admin" class="nav-link" id="navAdmin" style="display:none;">관리자</a></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- 히어로 섹션 -->
+    <section id="home" class="hero">
+        <div class="hero-content">
+            <h2 id="heroSubtitle">하나님을 사랑하는</h2>
+            <h3 id="heroTitle">보좌 앞에서</h3>
+            <p class="verse" id="heroVerse">"그러므로 그들이 하나님의 보좌 앞에 있고 또 그의 성전에서 밤낮 하나님을 섬기매 보좌에 앉으신 이가 그들 위에 장막을 치시리니" - 요한계시록 7:15</p>
+            <button class="cta-button" id="heroCTA" onclick="handleHeroCTA()">기도 제목 올리기</button>
+        </div>
+    </section>
+
+    <!-- 소개 섹션 -->
+    <section id="about" class="about">
+        <div class="container">
+            <h2 class="section-title">모임 소개</h2>
+            <div class="about-content">
+                <div class="about-card">
+                    <i class="fas fa-hands"></i>
+                    <h3>함께 기도해요</h3>
+                    <p>매주 한 번, 우리는 함께 모여 서로를 위해, 가족을 위해, 이웃을 위해 기도합니다.</p>
+                </div>
+                <div class="about-card">
+                    <i class="fas fa-heart"></i>
+                    <h3>서로 격려해요</h3>
+                    <p>기도 응답의 간증을 나누며 서로의 믿음을 격려하고 하나님의 살아계심을 경험합니다.</p>
+                </div>
+                <div class="about-card">
+                    <i class="fas fa-book-bible"></i>
+                    <h3>말씀 안에서</h3>
+                    <p>하나님의 말씀을 묵상하고 나누며 영적으로 성장하는 시간을 가집니다.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 모임 일정 -->
+    <section id="schedule" class="schedule">
+        <div class="container">
+            <h2 class="section-title">모임 일정</h2>
+            
+            <!-- 관리자 전용 수정 버튼 -->
+            <div class="schedule-admin-controls" id="scheduleAdminControls" style="display:none;">
+                <button class="admin-btn edit-btn" type="button" id="scheduleEditBtn">
+                    <i class="fas fa-edit"></i> 일정 수정하기
+                </button>
+            </div>
+            
+            <!-- 한국 오프라인 모임 -->
+            <div class="schedule-card" id="scheduleKorea">
+                <div class="schedule-header">
+                    <h3 id="scheduleKoreaTitle"><i class="fas fa-map-marker-alt"></i> 한국 오프라인 모임</h3>
+                </div>
+                <div class="schedule-item">
+                    <i class="fas fa-calendar-week"></i>
+                    <div>
+                        <h4 id="scheduleKoreaRegular">정기 모임</h4>
+                        <p id="scheduleKoreaRegularTime">매주 월요일 오전 10시 (한국시간)</p>
+                    </div>
+                </div>
+                <div class="schedule-item">
+                    <i class="fas fa-clock"></i>
+                    <div>
+                        <h4 id="scheduleKoreaTime">모임 시간</h4>
+                        <p id="scheduleKoreaTimeDetail">약 1시간 30분 (오전 10:00 - 11:30)</p>
+                    </div>
+                </div>
+                <div class="schedule-item">
+                    <i class="fas fa-home"></i>
+                    <div>
+                        <h4 id="scheduleKoreaLocation">모임 장소</h4>
+                        <p id="scheduleKoreaLocationDetail">오프라인 (회원가입 시 공지)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 글로벌 온라인 모임 -->
+            <div class="schedule-card" id="scheduleGlobal">
+                <div class="schedule-header">
+                    <h3 id="scheduleGlobalTitle"><i class="fas fa-globe"></i> 글로벌 온라인 모임</h3>
+                </div>
+                <div class="schedule-item">
+                    <i class="fas fa-calendar-week"></i>
+                    <div>
+                        <h4 id="scheduleGlobalRegular">정기 모임</h4>
+                        <p id="scheduleGlobalRegularTime">매주 토요일 밤 10시 (한국시간, KST)</p>
+                    </div>
+                </div>
+                <div class="schedule-item">
+                    <i class="fas fa-clock"></i>
+                    <div>
+                        <h4 id="scheduleGlobalTime">모임 시간</h4>
+                        <p id="scheduleGlobalTimeDetail">약 1시간 30분 (밤 10:00 - 11:30)</p>
+                    </div>
+                </div>
+                <div class="schedule-item">
+                    <i class="fas fa-video"></i>
+                    <div>
+                        <h4 id="scheduleGlobalMethod">모임 방식</h4>
+                        <p id="scheduleGlobalMethodDetail">온라인 화상회의 (링크는 회원가입 시 공지)</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 일정 수정 모달 -->
+            <div class="modal" id="scheduleEditModal" style="display:none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>모임 일정 수정</h3>
+                        <button class="modal-close" type="button" id="scheduleModalCloseBtn">&times;</button>
+                    </div>
+                    <form id="scheduleEditForm">
+                        <h4 style="margin-top: 1.5rem; margin-bottom: 1rem; color: var(--primary-color);">🇰🇷 한국 오프라인 모임</h4>
+                        
+                        <div class="form-group">
+                            <label for="koreaRegularTime">정기 모임 시간</label>
+                            <input type="text" id="koreaRegularTime" class="input-field" placeholder="예: 매주 월요일 오전 10시 (한국시간)">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="koreaTimeDetail">모임 시간 상세</label>
+                            <input type="text" id="koreaTimeDetail" class="input-field" placeholder="예: 약 1시간 30분 (오전 10:00 - 11:30)">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="koreaLocationDetail">모임 장소</label>
+                            <input type="text" id="koreaLocationDetail" class="input-field" placeholder="예: 오프라인 (회원가입 시 공지)">
+                        </div>
+                        
+                        <h4 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--primary-color);">🌍 글로벌 온라인 모임</h4>
+                        
+                        <div class="form-group">
+                            <label for="globalRegularTime">정기 모임 시간</label>
+                            <input type="text" id="globalRegularTime" class="input-field" placeholder="예: 매주 토요일 밤 10시 (한국시간, KST)">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="globalTimeDetail">모임 시간 상세</label>
+                            <input type="text" id="globalTimeDetail" class="input-field" placeholder="예: 약 1시간 30분 (밤 10:00 - 11:30)">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="globalMethodDetail">모임 방식</label>
+                            <input type="text" id="globalMethodDetail" class="input-field" placeholder="예: 온라인 화상회의 (링크는 회원가입 시 공지)">
+                        </div>
+                        
+                        <div class="form-actions" style="margin-top: 2rem;">
+                            <button type="submit" class="submit-button">일정 저장</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 로그인 섹션 -->
+    <section id="login" class="login">
+        <div class="container">
+            <h2 class="section-title">로그인</h2>
+            
+            <!-- 로그인 안내 -->
+            <div class="login-intro">
+                <p>회원가입 시 설정한 <strong>이메일과 비밀번호</strong>로 로그인하세요 🔐</p>
+                <p>로그인 후 기도제목, 간증, 공지사항을 확인하실 수 있습니다.</p>
+                
+                <!-- 기존 회원 안내 -->
+                <div style="margin-top: 1rem; padding: 1rem; background: #d4edda; border-left: 4px solid #28a745; border-radius: 8px; font-size: 0.9rem;">
+                    <p style="margin: 0.5rem 0; color: #155724;">
+                        <strong>✅ 기존 회원분들께 안내</strong>
+                    </p>
+                    <p style="margin: 0.75rem 0; color: #155724; line-height: 1.8; font-size: 1rem;">
+                        <strong>이전에 가입하신 분들도 지금 바로 비밀번호를 만들어서 로그인하실 수 있습니다!</strong>
+                    </p>
+                    <p style="margin: 0.5rem 0; color: #155724; line-height: 1.6;">
+                        <strong>📝 방법:</strong><br>
+                        1. 아래 로그인 폼에서 <strong>이메일 입력</strong><br>
+                        2. <strong>원하는 비밀번호를 만들어서 입력</strong> (최소 6자)<br>
+                        3. "로그인" 버튼 클릭<br>
+                        4. ✨ <strong>비밀번호가 자동으로 설정되며 바로 로그인됩니다!</strong>
+                    </p>
+                    <p style="margin: 0.75rem 0; padding: 0.75rem; background: #fff; border-radius: 6px; color: #856404; line-height: 1.6;">
+                        <strong>⚠️ 중요:</strong> 한 번 설정한 비밀번호는 꼭 기억해주세요!<br>
+                        다음부터는 이 비밀번호로 로그인하셔야 합니다.
+                    </p>
+                </div>
+                
+                <!-- 로그인 문제 안내 -->
+                <div style="margin-top: 1rem; padding: 1rem; background: #f0f8ff; border-left: 4px solid #5d4e99; border-radius: 8px; font-size: 0.9rem;">
+                    <p style="margin: 0.5rem 0; color: #333;">
+                        <strong>💡 로그인이 안 되시나요?</strong>
+                    </p>
+                    <ul style="margin: 0.5rem 0; padding-left: 1.5rem; color: #666;">
+                        <li><strong>처음 로그인:</strong> 원하는 비밀번호를 만들어 입력하세요 (자동으로 저장됩니다)</li>
+                        <li><strong>두 번째 이후:</strong> 처음 설정한 비밀번호를 입력하세요</li>
+                        <li>비밀번호는 최소 6자 이상이어야 합니다</li>
+                        <li>비밀번호를 잊어버리셨다면 관리자(yeonchoi08@gmail.com)에게 문의해주세요</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 로그인 폼 -->
+            <div class="login-form-container">
+                <h3>로그인</h3>
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="loginEmail">이메일 <span class="required">*</span></label>
+                        <input type="email" id="loginEmail" placeholder="example@email.com" class="input-field" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="loginPassword">비밀번호 <span class="required">*</span></label>
+                        <input type="password" id="loginPassword" placeholder="비밀번호를 입력해주세요" class="input-field" required>
+                    </div>
+
+                    <div class="form-actions-center">
+                        <button type="submit" class="submit-button">로그인</button>
+                    </div>
+                </form>
+                
+                <div class="login-footer">
+                    <p>아직 회원이 아니신가요? <a href="#register" class="link-text">회원가입하기</a></p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 회원가입 섹션 -->
+    <section id="register" class="register">
+        <div class="container">
+            <h2 class="section-title">회원가입</h2>
+            
+            <!-- 회원가입 안내 -->
+            <div class="register-intro">
+                <p>보좌 앞에서 기도 모임에 오신 것을 환영합니다! 🙏</p>
+                <p><strong>새로 가입하시는 분</strong>은 아래 양식을 작성하여 회원가입해주세요.</p>
+                <p><strong>이미 가입하신 분</strong>은 <a href="#login" style="color: #5d4e99; text-decoration: underline; font-weight: 600;">로그인 페이지</a>에서 비밀번호를 만들어 로그인하세요.</p>
+                
+                <div style="margin-top: 1rem; padding: 1rem; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 8px; font-size: 0.9rem;">
+                    <p style="margin: 0.5rem 0; color: #333;">
+                        <strong>🔐 비밀번호 안내</strong>
+                    </p>
+                    <ul style="margin: 0.5rem 0; padding-left: 1.5rem; color: #666;">
+                        <li>비밀번호는 최소 6자 이상이어야 합니다</li>
+                        <li>본인만 알 수 있는 비밀번호를 설정해주세요</li>
+                        <li>비밀번호는 안전하게 암호화되어 저장됩니다</li>
+                        <li><strong>비밀번호를 잊어버리지 않도록 꼭 기억해주세요!</strong></li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 회원가입 폼 -->
+            <div class="register-form-container">
+                <h3>회원 정보 입력</h3>
+                <form id="registerForm">
+                    <div class="form-group">
+                        <label for="memberName">이름 (실명) <span class="required">*</span></label>
+                        <input type="text" id="memberName" placeholder="실명을 입력해주세요" class="input-field" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="memberGender">성별 <span class="required">*</span></label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="gender" value="male" required>
+                                <span>남성</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="gender" value="female" required>
+                                <span>여성</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="memberPhone">전화번호 <span class="required">*</span></label>
+                        <input type="text" id="memberPhone" placeholder="전화번호" class="input-field" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="memberEmail">이메일 <span class="required">*</span></label>
+                        <input type="email" id="memberEmail" placeholder="example@email.com" class="input-field" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="memberPassword">비밀번호 <span class="required">*</span></label>
+                        <input type="password" id="memberPassword" placeholder="비밀번호를 입력해주세요 (최소 6자)" class="input-field" required minlength="6">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="memberPasswordConfirm">비밀번호 확인 <span class="required">*</span></label>
+                        <input type="password" id="memberPasswordConfirm" placeholder="비밀번호를 다시 입력해주세요" class="input-field" required minlength="6">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="memberChurch">출석교회 <span class="required">*</span></label>
+                        <input type="text" id="memberChurch" placeholder="출석하시는 교회명을 입력해주세요" class="input-field" required>
+                    </div>
+
+                    <div class="form-actions-center">
+                        <button type="submit" class="submit-button">가입 신청하기</button>
+                    </div>
+                </form>
+                
+                <div class="login-footer">
+                    <p>이미 회원이신가요? <a href="#login" class="link-text">로그인하기</a></p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 회원 목록 섹션 (독립) -->
+    <section id="memberListSection" class="register" style="padding-top: 2rem;">
+        <div class="container">
+            <!-- 등록된 회원 목록 -->
+            <div class="member-list-section">
+                <h3>모임 회원 목록</h3>
+                <p style="color: #666; margin-bottom: 1rem; font-size: 0.9rem;">
+                    함께 기도하는 모임 회원들을 확인할 수 있습니다. 
+                    <span style="color: #999;">(개인정보 보호를 위해 이메일과 전화번호는 관리자만 확인 가능합니다)</span>
+                </p>
+                <div class="member-list" id="memberList">
+                    <div class="loading">회원 목록을 불러오는 중...</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 기도 제목 섹션 -->
+    <section id="prayers" class="prayers protected-section" style="display:none;">
+        <div class="container">
+            <h2 class="section-title">기도 제목</h2>
+            
+            <!-- 기도 제목 등록 폼 -->
+            <div class="prayer-form-container">
+                <h3 id="prayerFormTitle">새로운 기도 제목</h3>
+                <form id="prayerForm">
+                    <input type="text" id="prayerName" placeholder="이름 (선택사항)" class="input-field">
+                    <input type="text" id="prayerTitle" placeholder="제목" class="input-field" required>
+                    <textarea id="prayerContent" placeholder="기도 제목 내용을 입력하세요..." class="textarea-field" required></textarea>
+                    <div class="form-actions">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="prayerAnonymous">
+                            <span id="prayerAnonymousLabel">익명으로 올리기</span>
+                        </label>
+                        <button type="submit" class="submit-button" id="prayerSubmitBtn">기도 제목 등록</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 기도 제목 목록 -->
+            <div class="prayer-list" id="prayerList">
+                <div class="loading">기도 제목을 불러오는 중...</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 간증 섹션 -->
+    <section id="testimonies" class="testimonies protected-section" style="display:none;">
+        <div class="container">
+            <h2 class="section-title">기도 응답 간증</h2>
+            
+            <!-- 간증 등록 폼 -->
+            <div class="testimony-form-container">
+                <h3 id="testimonyFormTitle">간증 나누기</h3>
+                <form id="testimonyForm">
+                    <input type="text" id="testimonyName" placeholder="이름 (선택사항)" class="input-field">
+                    <input type="text" id="testimonyTitle" placeholder="제목" class="input-field" required>
+                    <textarea id="testimonyContent" placeholder="하나님께서 응답하신 간증을 나눠주세요..." class="textarea-field" required></textarea>
+                    <div class="form-actions">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="testimonyAnonymous">
+                            <span id="testimonyAnonymousLabel">익명으로 올리기</span>
+                        </label>
+                        <button type="submit" class="submit-button" id="testimonySubmitBtn">간증 등록</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- 간증 목록 -->
+            <div class="testimony-list" id="testimonyList">
+                <div class="loading">간증을 불러오는 중...</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 공지사항 섹션 -->
+    <section id="notices" class="notices protected-section" style="display:none;">
+        <div class="container">
+            <h2 class="section-title">공지사항</h2>
+            
+            <!-- 관리자 전용: 공지사항 작성 폼 -->
+            <div class="notice-form-container" id="noticeFormContainer" style="display:none;">
+                <h3 id="noticeFormTitle">새로운 공지사항 작성</h3>
+                <form id="noticeForm">
+                    <div class="form-group">
+                        <label for="noticeTitle" id="noticeTitleLabel">제목 <span class="required">*</span></label>
+                        <input type="text" id="noticeTitle" placeholder="공지사항 제목을 입력하세요" class="input-field" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="noticeContent" id="noticeContentLabel">내용 <span class="required">*</span></label>
+                        <textarea id="noticeContent" placeholder="공지사항 내용을 입력하세요..." class="textarea-field" required></textarea>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="noticeImportant">
+                            <span id="noticeImportantLabel">중요 공지로 표시</span>
+                        </label>
+                        <div class="button-group">
+                            <button type="submit" class="submit-button" id="noticeSubmitBtn">공지사항 등록</button>
+                            <button type="button" class="email-button" id="sendEmailBtn" onclick="openEmailModal()">
+                                <span class="button-text">이메일<br>알림보내기</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- 이메일 수신자 선택 모달 -->
+            <div class="modal" id="emailModal" style="display:none;">
+                <div class="modal-content">
+                    <span class="close" onclick="closeEmailModal()">&times;</span>
+                    <h3>📧 이메일 수신자 선택</h3>
+                    
+                    <div class="email-options">
+                        <button type="button" class="option-button" onclick="selectAllMembers()">
+                            ✅ 전체 선택
+                        </button>
+                        <button type="button" class="option-button" onclick="deselectAllMembers()">
+                            ❌ 전체 해제
+                        </button>
+                    </div>
+                    
+                    <div class="member-selection-list" id="memberSelectionList">
+                        <div class="loading">회원 목록을 불러오는 중...</div>
+                    </div>
+                    
+                    <div class="modal-actions">
+                        <button type="button" class="cancel-button" onclick="closeEmailModal()">취소</button>
+                        <button type="button" class="confirm-button" onclick="sendSelectedEmails()">
+                            📧 선택한 회원에게 발송
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="notice-list" id="noticeList">
+                <div class="loading">공지사항을 불러오는 중...</div>
+            </div>
+            
+            <!-- 공지사항 수정 모달 -->
+            <div class="modal" id="editNoticeModal" style="display:none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>공지사항 수정</h3>
+                        <button class="modal-close" onclick="closeEditNoticeModal()">&times;</button>
+                    </div>
+                    <form id="editNoticeForm">
+                        <input type="hidden" id="editNoticeId">
+                        <div class="form-group">
+                            <label for="editNoticeTitle">제목 <span class="required">*</span></label>
+                            <input type="text" id="editNoticeTitle" class="input-field" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="editNoticeContent">내용 <span class="required">*</span></label>
+                            <textarea id="editNoticeContent" class="textarea-field" required></textarea>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="editNoticeImportant">
+                                <span>중요 공지로 표시</span>
+                            </label>
+                            <button type="submit" class="submit-button">수정 완료</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 관리자 페이지 -->
+    <section id="admin" class="admin protected-section" style="display:none;">
+        <div class="container">
+            <h2 class="section-title">🙏 기도인도자 · 관리자 페이지</h2>
+            
+            <div class="admin-intro">
+                <p>최지연 권사님(기도인도자), 환영합니다!</p>
+                <p>회원 정보 관리 및 공지사항 작성 권한이 있습니다.</p>
+            </div>
+            
+            <!-- 회원 정보 관리 -->
+            <div class="admin-section">
+                <h3>📋 전체 회원 정보</h3>
+                <div class="member-list" id="adminMemberList">
+                    <div class="loading">회원 목록을 불러오는 중...</div>
+                </div>
+            </div>
+            
+            <!-- 통계 정보 -->
+            <div class="admin-stats">
+                <div class="stat-card">
+                    <i class="fas fa-users"></i>
+                    <div class="stat-info">
+                        <h4>전체 회원</h4>
+                        <p class="stat-number" id="totalMembers">0</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-praying-hands"></i>
+                    <div class="stat-info">
+                        <h4>기도 제목</h4>
+                        <p class="stat-number" id="totalPrayers">0</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-heart"></i>
+                    <div class="stat-info">
+                        <h4>간증</h4>
+                        <p class="stat-number" id="totalTestimonies">0</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <i class="fas fa-bell"></i>
+                    <div class="stat-info">
+                        <h4>공지사항</h4>
+                        <p class="stat-number" id="totalNotices">0</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 데이터 관리 섹션 -->
+            <div class="admin-section">
+                <h3>💾 데이터 백업 및 복원</h3>
+                <p class="admin-description">모든 데이터를 JSON 파일로 백업하거나 복원할 수 있습니다.</p>
+                
+                <div class="data-management-buttons">
+                    <div class="button-group">
+                        <h4>📤 데이터 내보내기 (백업)</h4>
+                        <button class="admin-btn export-btn" onclick="exportAllData()">
+                            <i class="fas fa-download"></i> 전체 데이터 내보내기
+                        </button>
+                        <button class="admin-btn export-btn" onclick="exportMembers()">
+                            <i class="fas fa-users"></i> 회원 데이터만
+                        </button>
+                        <button class="admin-btn export-btn" onclick="exportPrayers()">
+                            <i class="fas fa-praying-hands"></i> 기도 제목만
+                        </button>
+                        <button class="admin-btn export-btn" onclick="exportTestimonies()">
+                            <i class="fas fa-heart"></i> 간증만
+                        </button>
+                        <button class="admin-btn export-btn" onclick="exportNotices()">
+                            <i class="fas fa-bell"></i> 공지사항만
+                        </button>
+                    </div>
+                    
+                    <div class="button-group">
+                        <h4>📥 데이터 가져오기 (복원)</h4>
+                        <input type="file" id="importFileInput" accept=".json" style="display: none;" onchange="handleImportFile(event)">
+                        <button class="admin-btn import-btn" onclick="document.getElementById('importFileInput').click()">
+                            <i class="fas fa-upload"></i> JSON 파일에서 가져오기
+                        </button>
+                        <p class="import-note">⚠️ 주의: 가져오기 시 기존 데이터가 덮어씌워질 수 있습니다.</p>
+                    </div>
+                    
+                    <div class="button-group">
+                        <h4>🔧 API 연결 테스트</h4>
+                        <button class="admin-btn test-btn" onclick="testDatabaseConnection()">
+                            <i class="fas fa-flask"></i> 데이터베이스 연결 테스트
+                        </button>
+                        <button class="admin-btn test-btn" onclick="testDataUpload()">
+                            <i class="fas fa-vial"></i> 샘플 데이터 업로드 테스트
+                        </button>
+                        <p class="import-note">💡 데이터 가져오기 전에 연결 상태를 확인하세요.</p>
+                    </div>
+                </div>
+                
+                <div id="dataOperationStatus" class="operation-status"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 푸터 -->
+    <footer>
+        <div class="container">
+            <p>"쉬지 말고 기도하라" - 데살로니가전서 5:17</p>
+            <p>&copy; 2026 보좌 앞에서. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- 맨 위로 버튼 -->
+    <button id="scrollTopBtn" class="scroll-top-btn" onclick="scrollToTop()">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+
+    <!-- EmailJS SDK -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    <script type="text/javascript">
+        (function(){
+            emailjs.init("vPjczq4len9NTODDF");
+        })();
+    </script>
+
+    <script src="js/main.js?v=2026030901"></script>
+</body>
+</html>

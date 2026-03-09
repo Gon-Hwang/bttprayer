@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이메일 알림 테스트</title>
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #667eea;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            background: #f7f9fc;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        .result.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+            display: block;
+        }
+        .result.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            display: block;
+        }
+        .result.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            display: block;
+        }
+        pre {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .status-badge.ok {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-badge.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-top: 8px;
+            box-sizing: border-box;
+        }
+        textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📧 이메일 알림 시스템 테스트</h1>
+        
+        <!-- 테스트 1: EmailJS 초기화 확인 -->
+        <div class="test-section">
+            <h3>1️⃣ EmailJS 초기화 확인</h3>
+            <button onclick="testEmailJS()">EmailJS 연결 테스트</button>
+            <div id="emailjsResult" class="result"></div>
+        </div>
+
+        <!-- 테스트 2: 회원 목록 불러오기 -->
+        <div class="test-section">
+            <h3>2️⃣ 회원 목록 불러오기</h3>
+            <button onclick="testLoadMembers()">회원 목록 조회</button>
+            <div id="membersResult" class="result"></div>
+        </div>
+
+        <!-- 테스트 3: 이메일 발송 테스트 (테스트용) -->
+        <div class="test-section">
+            <h3>3️⃣ 실제 이메일 발송 테스트</h3>
+            <label>받는 사람 이메일:</label>
+            <input type="email" id="testEmail" placeholder="test@example.com" value="">
+            
+            <label>공지사항 제목:</label>
+            <input type="text" id="testTitle" placeholder="테스트 공지사항" value="이메일 테스트">
+            
+            <label>공지사항 내용:</label>
+            <textarea id="testContent" placeholder="공지사항 내용을 입력하세요...">이메일 발송 테스트입니다.
+
+이 메일이 정상적으로 도착했다면 시스템이 잘 작동하는 것입니다.
+
+감사합니다.</textarea>
+            
+            <button onclick="testSendEmail()">테스트 이메일 발송</button>
+            <div id="sendResult" class="result"></div>
+        </div>
+
+        <!-- 테스트 4: openEmailModal 함수 확인 -->
+        <div class="test-section">
+            <h3>4️⃣ Modal 함수 테스트</h3>
+            <button onclick="testModalFunction()">openEmailModal 함수 확인</button>
+            <div id="modalResult" class="result"></div>
+        </div>
+    </div>
+
+    <!-- EmailJS SDK -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    
+    <script>
+        // EmailJS 초기화
+        (function(){
+            try {
+                emailjs.init("vPjczq4len9NTODDF");
+                console.log('✅ EmailJS 초기화 완료');
+            } catch (error) {
+                console.error('❌ EmailJS 초기화 실패:', error);
+            }
+        })();
+
+        // 테스트 1: EmailJS 확인
+        function testEmailJS() {
+            const resultDiv = document.getElementById('emailjsResult');
+            
+            try {
+                if (typeof emailjs !== 'undefined') {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        ✅ <strong>EmailJS 정상 로드됨</strong><br>
+                        <small>Version: ${emailjs.version || 'Unknown'}</small><br>
+                        <small>Public Key: vPjczq4len9NTODDF</small>
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = '❌ EmailJS가 로드되지 않았습니다.';
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `❌ 오류: ${error.message}`;
+            }
+        }
+
+        // 테스트 2: 회원 목록 조회
+        async function testLoadMembers() {
+            const resultDiv = document.getElementById('membersResult');
+            resultDiv.className = 'result info';
+            resultDiv.innerHTML = '⏳ 회원 목록을 불러오는 중...';
+            
+            try {
+                const response = await fetch('tables/members?limit=1000');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                const members = result.data || [];
+                const membersWithEmail = members.filter(m => m.email);
+                
+                resultDiv.className = 'result success';
+                resultDiv.innerHTML = `
+                    ✅ <strong>회원 목록 조회 성공</strong><br>
+                    <br>
+                    📊 <strong>통계:</strong><br>
+                    • 전체 회원: ${members.length}명<br>
+                    • 이메일 있는 회원: ${membersWithEmail.length}명<br>
+                    • 이메일 없는 회원: ${members.length - membersWithEmail.length}명<br>
+                    <br>
+                    👥 <strong>회원 목록:</strong><br>
+                    <pre>${JSON.stringify(membersWithEmail.map(m => ({
+                        name: m.name,
+                        email: m.email
+                    })), null, 2)}</pre>
+                `;
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `❌ <strong>오류 발생:</strong> ${error.message}`;
+                console.error('회원 목록 조회 실패:', error);
+            }
+        }
+
+        // 테스트 3: 실제 이메일 발송
+        async function testSendEmail() {
+            const resultDiv = document.getElementById('sendResult');
+            const email = document.getElementById('testEmail').value.trim();
+            const title = document.getElementById('testTitle').value.trim();
+            const content = document.getElementById('testContent').value.trim();
+            
+            if (!email) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '❌ 이메일 주소를 입력해주세요.';
+                return;
+            }
+            
+            if (!title || !content) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = '❌ 제목과 내용을 입력해주세요.';
+                return;
+            }
+            
+            resultDiv.className = 'result info';
+            resultDiv.innerHTML = '⏳ 이메일을 발송하는 중...';
+            
+            try {
+                const templateParams = {
+                    to_email: email,
+                    notice_title: title,
+                    notice_content: content,
+                    reply_to: 'noreply@bttprayer.net'
+                };
+                
+                console.log('📧 발송 시도:', templateParams);
+                
+                const response = await emailjs.send(
+                    'service_6c0rfjg',
+                    'template_nw8j7ah',
+                    templateParams
+                );
+                
+                console.log('✅ 발송 성공:', response);
+                
+                resultDiv.className = 'result success';
+                resultDiv.innerHTML = `
+                    ✅ <strong>이메일 발송 성공!</strong><br>
+                    <br>
+                    📧 <strong>발송 정보:</strong><br>
+                    • 받는 사람: ${email}<br>
+                    • 제목: ${title}<br>
+                    • 상태: ${response.status}<br>
+                    • 응답: ${response.text}<br>
+                    <br>
+                    <small>💡 메일함을 확인해주세요. 스팸함도 확인하세요!</small>
+                `;
+                
+            } catch (error) {
+                console.error('❌ 발송 실패:', error);
+                
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    ❌ <strong>이메일 발송 실패</strong><br>
+                    <br>
+                    오류 내용:<br>
+                    <pre>${JSON.stringify(error, null, 2)}</pre>
+                `;
+            }
+        }
+
+        // 테스트 4: Modal 함수 확인
+        function testModalFunction() {
+            const resultDiv = document.getElementById('modalResult');
+            
+            try {
+                // openEmailModal 함수가 정의되어 있는지 확인
+                if (typeof openEmailModal === 'function') {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        ✅ <strong>openEmailModal 함수가 정의되어 있습니다.</strong><br>
+                        <br>
+                        ⚠️ 하지만 이 테스트 페이지에는 실제 모달 HTML이 없으므로<br>
+                        실제 사이트(index.html)에서 테스트해야 합니다.
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `
+                        ❌ <strong>openEmailModal 함수가 정의되지 않았습니다.</strong><br>
+                        <br>
+                        이 함수는 js/main.js에 정의되어 있어야 합니다.<br>
+                        index.html에서만 작동합니다.
+                    `;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `❌ 오류: ${error.message}`;
+            }
+        }
+
+        // 페이지 로드 시 자동으로 EmailJS 테스트
+        window.addEventListener('load', () => {
+            console.log('🚀 이메일 테스트 페이지 로드됨');
+            testEmailJS();
+        });
+    </script>
+</body>
+</html>

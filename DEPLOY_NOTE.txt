@@ -1,0 +1,16 @@
+헤더 높이 축소 완료
+
+변경 사항:
+1. header padding: 0.6rem → 0.4rem
+2. user-info padding: 0.5rem 1.2rem → 0.4rem 1rem
+3. user-info gap: 0.7rem → 0.5rem
+4. welcome-text font-size: 0.85rem → 0.8rem
+5. admin-badge padding: 0.25rem 0.7rem → 0.2rem 0.6rem
+6. admin-badge font-size: 0.75rem → 0.7rem
+7. logout-btn padding: 0.4rem 1rem → 0.35rem 0.9rem
+8. logout-btn font-size: 0.8rem → 0.75rem
+9. hero section padding: 150px → 80px (상단)
+
+배포 후 반드시 강력 새로고침 필요:
+- Windows/Linux: Ctrl + Shift + R
+- Mac: Cmd + Shift + R
