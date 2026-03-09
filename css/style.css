@@ -119,11 +119,12 @@ header {
     object-fit: contain;
     /* 투명 배경 그대로 유지 */
     background: transparent;
+    filter: hue-rotate(-35deg) saturate(1.25);
 }
 
 .logo i {
     font-size: 1.588rem; /* 1.323rem * 1.2 = 1.588rem */
-    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     animation: float 3s ease-in-out infinite;
@@ -138,7 +139,7 @@ header {
 .logo h1 {
     font-size: 1.235rem; /* 1.029rem * 1.2 = 1.235rem */
     font-weight: 700;
-    background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -157,7 +158,7 @@ header {
     font-size: 1.032rem; /* 0.86rem * 1.2 = 1.032rem (20% 증가) */
     font-weight: 600;
     letter-spacing: 1.5px;
-    color: #1d4ed8;
+    color: #b91c1c;
     opacity: 0.8;
     line-height: 1;
 }
