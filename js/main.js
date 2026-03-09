@@ -40,6 +40,11 @@ window.fetch = (input, init) => {
 // 번역 캐시 (성능 최적화)
 let translationCache = {};
 
+function getCurrentUserKey() {
+    if (!currentUser) return '';
+    return (currentUser.email || currentUser.id || currentUser.name || '').toLowerCase().trim();
+}
+
 // 실시간 자동 번역 함수 (MyMemory Translation API 사용)
 async function translateText(text, targetLang) {
     if (!text || targetLang === 'ko') return text;
@@ -1423,12 +1428,12 @@ async function renderPrayers() {
         prayerList.innerHTML = `<div class="loading">Translating prayer requests...</div>`;
     }
     
-    // 로컬스토리지에서 기도한 항목 목록 가져오기
-    const prayedItems = JSON.parse(localStorage.getItem('prayedItems') || '[]');
+    const currentUserKey = getCurrentUserKey();
     
     // 각 기도제목을 번역하고 HTML 생성
     const translatedPrayers = await Promise.all(currentPrayers.map(async (prayer) => {
-        const hasPrayed = prayedItems.includes(prayer.id);
+        const prayerUserIds = Array.isArray(prayer.prayerUserIds) ? prayer.prayerUserIds : [];
+        const hasPrayed = currentUserKey ? prayerUserIds.includes(currentUserKey) : false;
         const prayBtnClass = hasPrayed ? 'action-button pray-btn prayed' : 'action-button pray-btn';
         const checkIcon = hasPrayed ? '<i class="fas fa-check"></i> ' : '';
         const anonymousText = t.anonymous;
@@ -1455,7 +1460,7 @@ async function renderPrayers() {
             </div>
             <p class="item-content">${escapeHtml(displayContent)}</p>
             <div class="item-actions">
-                <button class="${prayBtnClass}" onclick="prayForItem('${prayer.id}')">
+                <button class="${prayBtnClass}" onclick="prayForItem('${prayer.id}')" ${hasPrayed ? 'disabled' : ''}>
                     ${checkIcon}<i class="fas fa-praying-hands"></i> ${t.prayers_button}
                 </button>
                 <button class="action-button delete" onclick="deletePrayer('${prayer.id}')">
@@ -1519,18 +1524,25 @@ async function handlePrayerSubmit(e) {
 
 // 기도했어요 클릭 (토글 기능)
 async function prayForItem(id) {
-    // 로컬스토리지에서 기도한 항목 목록 가져오기
-    let prayedItems = JSON.parse(localStorage.getItem('prayedItems') || '[]');
-    const hasPrayed = prayedItems.includes(id);
+    const currentUserKey = getCurrentUserKey();
+    if (!currentUserKey) {
+        showToast('로그인 후 이용할 수 있습니다.');
+        return;
+    }
     
     try {
         const prayer = currentPrayers.find(p => p.id === id);
         if (!prayer) return;
+        const prayerUserIds = Array.isArray(prayer.prayerUserIds) ? prayer.prayerUserIds : [];
+
+        // 가입자 1인당 1회만 허용
+        if (prayerUserIds.includes(currentUserKey)) {
+            showToast('이미 기도에 참여하셨어요 🙏');
+            return;
+        }
         
-        // 기도 카운트 증가 또는 감소
-        const newCount = hasPrayed 
-            ? Math.max(0, (prayer.prayerCount || 0) - 1)  // 취소: 감소 (최소 0)
-            : (prayer.prayerCount || 0) + 1;               // 기도: 증가
+        const newCount = (prayer.prayerCount || 0) + 1;
+        const nextPrayerUserIds = [...prayerUserIds, currentUserKey];
         
         const updateMethod = API_BASE_URL ? 'PUT' : 'PATCH';
         const response = await fetch(`tables/prayers/${id}`, {
@@ -1539,24 +1551,13 @@ async function prayForItem(id) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                prayerCount: newCount
+                prayerCount: newCount,
+                prayerUserIds: nextPrayerUserIds
             })
         });
         
         if (response.ok) {
-            // 로컬스토리지 업데이트
-            if (hasPrayed) {
-                // 기도 취소: 목록에서 제거
-                prayedItems = prayedItems.filter(itemId => itemId !== id);
-                localStorage.setItem('prayedItems', JSON.stringify(prayedItems));
-                showToast('기도를 취소했습니다');
-            } else {
-                // 기도 추가: 목록에 추가
-                prayedItems.push(id);
-                localStorage.setItem('prayedItems', JSON.stringify(prayedItems));
-                showToast('기도해주셔서 감사합니다! 🙏');
-            }
-            
+            showToast('기도해주셔서 감사합니다! 🙏');
             await loadPrayers();
         }
     } catch (error) {
@@ -1619,13 +1620,13 @@ async function renderTestimonies() {
         testimonyList.innerHTML = `<div class="loading">Translating testimonies...</div>`;
     }
     
-    // 로컬스토리지에서 좋아요한 항목 목록 가져오기
-    const likedItems = JSON.parse(localStorage.getItem('likedTestimonies') || '[]');
+    const currentUserKey = getCurrentUserKey();
     const anonymousText = t.anonymous;
     
     // 각 간증을 번역하고 HTML 생성
     const translatedTestimonies = await Promise.all(currentTestimonies.map(async (testimony) => {
-        const hasLiked = likedItems.includes(testimony.id);
+        const likeUserIds = Array.isArray(testimony.likeUserIds) ? testimony.likeUserIds : [];
+        const hasLiked = currentUserKey ? likeUserIds.includes(currentUserKey) : false;
         const likeBtnClass = hasLiked ? 'action-button like-btn liked' : 'action-button like-btn';
         const heartIcon = hasLiked ? 'fas fa-heart' : 'far fa-heart';
         
@@ -1650,7 +1651,7 @@ async function renderTestimonies() {
             </div>
             <p class="item-content">${escapeHtml(displayContent)}</p>
             <div class="item-actions">
-                <button class="${likeBtnClass}" onclick="likeTestimony('${testimony.id}')">
+                <button class="${likeBtnClass}" onclick="likeTestimony('${testimony.id}')" ${hasLiked ? 'disabled' : ''}>
                     <i class="${heartIcon}"></i> ${t.testimonies_button}
                 </button>
                 <button class="action-button delete" onclick="deleteTestimony('${testimony.id}')">
@@ -1714,18 +1715,25 @@ async function handleTestimonySubmit(e) {
 
 // 간증 좋아요 클릭 (토글 기능)
 async function likeTestimony(id) {
-    // 로컬스토리지에서 좋아요한 항목 목록 가져오기
-    let likedItems = JSON.parse(localStorage.getItem('likedTestimonies') || '[]');
-    const hasLiked = likedItems.includes(id);
+    const currentUserKey = getCurrentUserKey();
+    if (!currentUserKey) {
+        showToast('로그인 후 이용할 수 있습니다.');
+        return;
+    }
     
     try {
         const testimony = currentTestimonies.find(t => t.id === id);
         if (!testimony) return;
-        
-        // 좋아요 카운트 증가 또는 감소
-        const newCount = hasLiked 
-            ? Math.max(0, (testimony.likeCount || 0) - 1)  // 취소: 감소 (최소 0)
-            : (testimony.likeCount || 0) + 1;               // 좋아요: 증가
+        const likeUserIds = Array.isArray(testimony.likeUserIds) ? testimony.likeUserIds : [];
+
+        // 가입자 1인당 1회만 허용
+        if (likeUserIds.includes(currentUserKey)) {
+            showToast('이미 할렐루야에 참여하셨어요 🎉');
+            return;
+        }
+
+        const newCount = (testimony.likeCount || 0) + 1;
+        const nextLikeUserIds = [...likeUserIds, currentUserKey];
         
         const updateMethod = API_BASE_URL ? 'PUT' : 'PATCH';
         const response = await fetch(`tables/testimonies/${id}`, {
@@ -1734,24 +1742,13 @@ async function likeTestimony(id) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                likeCount: newCount
+                likeCount: newCount,
+                likeUserIds: nextLikeUserIds
             })
         });
         
         if (response.ok) {
-            // 로컬스토리지 업데이트
-            if (hasLiked) {
-                // 좋아요 취소: 목록에서 제거
-                likedItems = likedItems.filter(itemId => itemId !== id);
-                localStorage.setItem('likedTestimonies', JSON.stringify(likedItems));
-                showToast('좋아요를 취소했습니다');
-            } else {
-                // 좋아요 추가: 목록에 추가
-                likedItems.push(id);
-                localStorage.setItem('likedTestimonies', JSON.stringify(likedItems));
-                showToast('할렐루야! 함께 기뻐합니다! 🎉');
-            }
-            
+            showToast('할렐루야! 함께 기뻐합니다! 🎉');
             await loadTestimonies();
         }
     } catch (error) {
