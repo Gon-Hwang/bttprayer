@@ -2176,9 +2176,10 @@ async function deleteTestimony(id) {
 }
 
 // 사역 사진 갤러리 로드
-async function loadGalleryPosts() {
+// silent=true: 기존 목록을 유지하며 백그라운드 갱신 (업로드/삭제 후 호출)
+async function loadGalleryPosts(silent = false) {
     const galleryList = document.getElementById('galleryList');
-    if (galleryList) {
+    if (galleryList && !silent) {
         galleryList.innerHTML = `<div class="loading">${translations[currentLanguage].gallery_loading}</div>`;
     }
 
@@ -2189,7 +2190,8 @@ async function loadGalleryPosts() {
     }
 
     try {
-        const response = await fetchWithRetry('tables/gallery_posts?limit=100&sort=-created_at');
+        const ts = Date.now();
+        const response = await fetchWithRetry(`tables/gallery_posts?limit=100&sort=-created_at&_=${ts}`);
         const data = await response.json();
         const remotePosts = data.data || [];
         const localPosts = getLocalGalleryPosts();
@@ -2322,11 +2324,14 @@ async function deleteGalleryPost(postId, isLocalOnly) {
     }
     if (!await showConfirm('이 사진 게시물을 삭제하시겠습니까?')) return;
 
+    // 낙관적 즉시 제거: 서버 응답 전에 화면에서 먼저 삭제
+    currentGalleryPosts = currentGalleryPosts.filter((p) => String(p.id) !== String(postId));
+    renderGalleryPosts();
+
     try {
         if (isLocalOnly) {
             removeLocalGalleryPostById(postId);
-            await loadGalleryPosts();
-            showToast('로컬 갤러리 게시물이 삭제되었습니다.');
+            showToast('갤러리 게시물이 삭제되었습니다.');
             return;
         }
 
@@ -2336,10 +2341,13 @@ async function deleteGalleryPost(postId, isLocalOnly) {
         if (!response.ok && response.status !== 204) {
             throw new Error(`삭제 실패 (${response.status})`);
         }
-        await loadGalleryPosts();
         showToast('갤러리 게시물이 삭제되었습니다.');
+        // 백그라운드에서 서버 목록 동기화
+        loadGalleryPosts(true);
     } catch (error) {
         console.error('갤러리 게시물 삭제 오류:', error);
+        // 실패 시 목록 복원
+        await loadGalleryPosts();
         alert(`삭제 중 오류가 발생했습니다.\n\n${error.message}`);
     }
 }
@@ -2481,10 +2489,23 @@ async function handleGallerySubmit(e) {
             throw new Error(`갤러리 등록 실패 (${response.status})`);
         }
 
+        // 낙관적 즉시 반영: 서버 응답 전에 화면에 먼저 추가
+        const newPost = {
+            id: `optimistic-${Date.now()}`,
+            authorName: currentUser.name || '익명',
+            authorEmail: currentUser.email || '',
+            description: description,
+            images: imageDataUrls,
+            date: new Date().toISOString()
+        };
+        currentGalleryPosts = [newPost, ...currentGalleryPosts];
+        renderGalleryPosts();
+
         document.getElementById('galleryForm').reset();
         document.getElementById('galleryImagePreview').style.display = 'none';
         showToast(translations[currentLanguage].gallery_save_success);
-        await loadGalleryPosts();
+        // 백그라운드에서 서버 목록으로 교체 (서버 생성 id로 갱신)
+        loadGalleryPosts(true);
     } catch (error) {
         const errorMessage = String(error && error.message ? error.message : error);
         const isTableMissing = errorMessage.includes('no such table: gallery_posts') || errorMessage.includes('gallery_posts table unavailable');
