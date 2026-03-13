@@ -2338,17 +2338,23 @@ async function deleteGalleryPost(postId, isLocalOnly) {
         const response = await fetch(`tables/gallery_posts/${postId}`, {
             method: 'DELETE'
         });
-        if (!response.ok && response.status !== 204) {
-            throw new Error(`삭제 실패 (${response.status})`);
+        // 204 No Content, 200 OK, 404 Already gone → 모두 성공 처리
+        if (response.status === 404) {
+            showToast('갤러리 게시물이 삭제되었습니다.');
+            loadGalleryPosts(true);
+            return;
+        }
+        if (!response.ok) {
+            let body = '';
+            try { body = await response.text(); } catch (_) {}
+            throw new Error(`삭제 실패 (HTTP ${response.status})${body ? '\n' + body.slice(0, 200) : ''}`);
         }
         showToast('갤러리 게시물이 삭제되었습니다.');
-        // 백그라운드에서 서버 목록 동기화
         loadGalleryPosts(true);
     } catch (error) {
         console.error('갤러리 게시물 삭제 오류:', error);
-        // 실패 시 목록 복원
         await loadGalleryPosts();
-        alert(`삭제 중 오류가 발생했습니다.\n\n${error.message}`);
+        alert(`삭제 오류:\n\n${error.message}\n\n이 내용을 관리자에게 알려주세요.`);
     }
 }
 
