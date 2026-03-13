@@ -2,19 +2,47 @@
 let currentPrayers = [];
 let currentTestimonies = [];
 let currentNotices = [];
+let currentGalleryPosts = [];
 let currentMembers = [];
 let currentUser = null;
 let currentLanguage = 'ko'; // 기본 언어: 한글
+let deferredInstallPrompt = null;
+const GALLERY_LOCAL_STORAGE_KEY = 'galleryPostsLocal';
+const PWA_INSTALLED_STORAGE_KEY = 'pwaInstalled';
+let installModalResolver = null;
+let isGalleryRemoteAvailable = true;
+let confirmModalResolver = null;
+const testimonyLikeInFlight = new Set();
+const prayerClickInFlight = new Set();
 
-// 배포 도메인이 아닐 때(로컬/사설 IP 포함) 배포 API를 사용
-const PRODUCTION_HOSTS = new Set([
-    'bttprayer.net',
-    'www.bttprayer.net',
-    'bttprayer.pages.dev'
-]);
-const API_BASE_URL = PRODUCTION_HOSTS.has(window.location.hostname)
-    ? ''
-    : 'https://bttprayer.net/';
+// iOS PWA standalone 모드에서 confirm()이 차단되는 문제를 우회하는 커스텀 confirm
+function showConfirm(message) {
+    const modal = document.getElementById('confirmModal');
+    if (!modal) return Promise.resolve(window.confirm(message));
+    return new Promise((resolve) => {
+        document.getElementById('confirmModalMessage').textContent = message;
+        modal.style.display = 'flex';
+        if (confirmModalResolver) confirmModalResolver(false);
+        confirmModalResolver = resolve;
+    });
+}
+
+function closeConfirmModal(result) {
+    const modal = document.getElementById('confirmModal');
+    if (modal) modal.style.display = 'none';
+    if (confirmModalResolver) {
+        confirmModalResolver(result);
+        confirmModalResolver = null;
+    }
+}
+
+const CURRENT_HOST = window.location.hostname;
+const IS_LOCAL_OR_LAN = CURRENT_HOST === 'localhost' || /^(127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})$/.test(CURRENT_HOST);
+
+// 현재 배포본에서 /tables 라우트가 정적 index로 매핑되어 데이터 API가 깨질 수 있어
+// API가 정상 동작하는 고정 Pages 배포 URL을 우선 사용한다.
+const STABLE_API_ORIGIN = 'https://b7ddfb06.bttprayer.pages.dev/';
+const API_BASE_URL = CURRENT_HOST === 'b7ddfb06.bttprayer.pages.dev' ? '' : STABLE_API_ORIGIN;
 
 // 상대 경로(tables/...) 요청을 환경에 맞는 절대 경로로 변환
 const nativeFetch = window.fetch.bind(window);
@@ -26,9 +54,13 @@ window.fetch = (input, init) => {
             (method === 'PATCH' || method === 'PUT') && /^tables\/prayers\/[^/?#]+$/.test(input);
         const isTestimonyLikeEndpoint =
             (method === 'PATCH' || method === 'PUT') && /^tables\/testimonies\/[^/?#]+$/.test(input);
+        const isGalleryEndpoint =
+            /^tables\/gallery_posts(?:\/[^/?#]+)?$/.test(input) && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE');
+        const isNoticeEndpoint =
+            /^tables\/notices(?:\/[^/?#]+)?$/.test(input) && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE');
 
-        // 요청하신 "기도했어요" 버튼만 로컬에서도 동작하도록 예외 허용
-        if (API_BASE_URL && method !== 'GET' && !isPrayerToggleEndpoint && !isTestimonyLikeEndpoint) {
+        // 로컬/LAN에서만 쓰기 요청 기본 차단 (실수로 운영 데이터 변경 방지)
+        if (IS_LOCAL_OR_LAN && API_BASE_URL && method !== 'GET' && !isPrayerToggleEndpoint && !isTestimonyLikeEndpoint && !isGalleryEndpoint && !isNoticeEndpoint) {
             console.warn('[LOCAL SAFETY] 로컬 환경에서 쓰기 요청이 차단되었습니다:', method, input);
             return Promise.reject(new Error('로컬 안전모드: 운영 데이터 쓰기 요청이 차단되었습니다.'));
         }
@@ -43,6 +75,19 @@ let translationCache = {};
 function getCurrentUserKey() {
     if (!currentUser) return '';
     return (currentUser.email || currentUser.id || currentUser.name || '').toLowerCase().trim();
+}
+
+function getUserActionList(storageKey, userKey) {
+    if (!userKey) return [];
+    const all = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    return Array.isArray(all[userKey]) ? all[userKey] : [];
+}
+
+function saveUserActionList(storageKey, userKey, list) {
+    if (!userKey) return;
+    const all = JSON.parse(localStorage.getItem(storageKey) || '{}');
+    all[userKey] = list;
+    localStorage.setItem(storageKey, JSON.stringify(all));
 }
 
 // 실시간 자동 번역 함수 (MyMemory Translation API 사용)
@@ -171,6 +216,7 @@ const translations = {
         nav_login: '로그인',
         nav_prayers: '기도제목',
         nav_testimonies: '간증',
+        nav_gallery: '사진겔러리',
         nav_notices: '공지사항',
         nav_admin: '관리자',
         
@@ -253,6 +299,36 @@ const translations = {
         testimonies_button: '할렐루야',
         testimonies_loading: '간증을 불러오는 중...',
         testimonies_empty: '아직 등록된 간증이 없습니다. 하나님의 응답하신 간증을 나눠주세요!',
+
+        // 사역 사진 갤러리
+        gallery_title: '사진겔러리',
+        gallery_form_title: '사진 올리기',
+        gallery_upload_label: '사진 업로드 (1장)',
+        gallery_description_label: '설명',
+        gallery_description_placeholder: '사역 활동 사진 설명을 입력하세요...',
+        gallery_submit: '갤러리 등록',
+        gallery_limit_note: '한 번에 1장만 업로드할 수 있습니다.',
+        gallery_save_success: '사진이 저장되었습니다.',
+        gallery_saved_local: '로컬 임시 저장',
+        gallery_local_save_success: '사진이 저장되었습니다.',
+        gallery_loading: '사진을 불러오는 중...',
+        gallery_empty: '아직 등록된 사역 활동 사진이 없습니다. 첫 사진을 올려주세요!',
+
+        // 앱 설치 안내 모달
+        install_modal_offer_title: '앱 설치 안내',
+        install_modal_offer_message: '앱 형태로 설치하면 PC는 바탕화면에, 모바일은 홈 화면에 보좌 앞에서 로고 아이콘 바로가기가 생성되어 바로 실행할 수 있습니다.',
+        install_modal_offer_sub: '지금 설치를 선택해 아이콘 바로가기를 사용하세요.',
+        install_modal_path_pc: 'PC(Chrome/Edge): 주소창의 설치 아이콘 또는 우상단 메뉴(⋮) > "앱 설치" > 바탕화면 바로가기 만들기',
+        install_modal_path_mobile: '모바일: 브라우저 메뉴에서 "홈 화면에 추가"',
+        install_modal_install_now: '지금 설치',
+        install_modal_later: '나중에',
+        install_modal_done_title: '설치 요청 완료',
+        install_modal_done_message: '설치가 완료되면 홈 화면(또는 바탕화면)에 앱 아이콘이 생성됩니다.',
+        install_modal_done_sub: '아이콘이 바로 안 보이면 아래 수동 설치 방법을 확인해주세요.',
+        install_modal_manual_title: '수동 설치 방법',
+        install_modal_manual_ios: 'iPhone/iPad: 공유 버튼 -> "홈 화면에 추가"',
+        install_modal_manual_android: 'Android/PC: 브라우저 메뉴(⋮) -> "홈 화면에 추가" 또는 "앱 설치"',
+        install_modal_ok: '확인',
         
         // 공지사항
         notices_title: '공지사항',
@@ -317,6 +393,7 @@ const translations = {
         nav_login: 'Login',
         nav_prayers: 'Prayer Requests',
         nav_testimonies: 'Testimonies',
+        nav_gallery: 'Photo Gallery',
         nav_notices: 'Notices',
         nav_admin: 'Admin',
         
@@ -399,6 +476,36 @@ const translations = {
         testimonies_button: 'Hallelujah',
         testimonies_loading: 'Loading testimonies...',
         testimonies_empty: 'No testimonies yet. Share God\'s answered prayers!',
+
+        // Ministry gallery
+        gallery_title: 'Ministry Photo Gallery',
+        gallery_form_title: 'Upload Photos',
+        gallery_upload_label: 'Upload Photo (1)',
+        gallery_description_label: 'Description',
+        gallery_description_placeholder: 'Write a short description of this ministry activity...',
+        gallery_submit: 'Post Gallery',
+        gallery_limit_note: 'You can upload only one photo at a time.',
+        gallery_save_success: 'Photo has been saved.',
+        gallery_saved_local: 'Saved locally',
+        gallery_local_save_success: 'Photo has been saved.',
+        gallery_loading: 'Loading photos...',
+        gallery_empty: 'No ministry photos yet. Share the first post!',
+
+        // App install modal
+        install_modal_offer_title: 'Install App',
+        install_modal_offer_message: 'Install this as an app to create a Before The Throne icon shortcut on desktop (PC) or home screen (mobile) for quick launch.',
+        install_modal_offer_sub: 'Choose Install now to use the icon shortcut.',
+        install_modal_path_pc: 'PC (Chrome/Edge): Address bar install icon or menu (⋮) > "Install app" > create desktop shortcut',
+        install_modal_path_mobile: 'Mobile: Use browser menu > "Add to Home screen"',
+        install_modal_install_now: 'Install now',
+        install_modal_later: 'Later',
+        install_modal_done_title: 'Install Request Sent',
+        install_modal_done_message: 'Once installation finishes, an app icon appears on your home/desktop screen.',
+        install_modal_done_sub: 'If the icon does not appear immediately, use manual install steps below.',
+        install_modal_manual_title: 'Manual Install Steps',
+        install_modal_manual_ios: 'iPhone/iPad: Share button -> "Add to Home Screen"',
+        install_modal_manual_android: 'Android/PC: Browser menu (⋮) -> "Add to Home screen" or "Install app"',
+        install_modal_ok: 'OK',
         
         // Notices
         notices_title: 'Notices',
@@ -455,6 +562,8 @@ const translations = {
 
 // 페이지 로드 시 실행
 document.addEventListener('DOMContentLoaded', function() {
+    setupPwaInstallPrompt();
+    registerServiceWorker();
     loadLanguagePreference();
     checkLoginStatus();
     initializeApp();
@@ -462,6 +571,187 @@ document.addEventListener('DOMContentLoaded', function() {
     setupScrollButton();
     setupMobileMenu();
 });
+
+function setupPwaInstallPrompt() {
+    updateInstallAppButton();
+
+    window.addEventListener('beforeinstallprompt', (event) => {
+        event.preventDefault();
+        deferredInstallPrompt = event;
+        updateInstallAppButton();
+    });
+
+    window.addEventListener('appinstalled', () => {
+        deferredInstallPrompt = null;
+        markPwaInstalled();
+        updateInstallAppButton();
+        showToast(currentLanguage === 'ko' ? '앱 설치가 완료되었습니다.' : 'App installation completed.');
+    });
+}
+
+function registerServiceWorker() {
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').catch((error) => {
+                console.warn('[PWA] 서비스워커 등록 실패:', error);
+            });
+        });
+    }
+}
+
+function isStandaloneMode() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function markPwaInstalled() {
+    localStorage.setItem(PWA_INSTALLED_STORAGE_KEY, 'true');
+}
+
+function isPwaInstalled() {
+    return localStorage.getItem(PWA_INSTALLED_STORAGE_KEY) === 'true';
+}
+
+function isIosDevice() {
+    return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+}
+
+function updateInstallAppButton() {
+    const installBtn = document.getElementById('installAppBtn');
+    if (!installBtn) return;
+    const show = !isStandaloneMode();
+    installBtn.style.display = show ? 'inline-flex' : 'none';
+}
+
+window.triggerAppInstall = async function triggerAppInstall() {
+    if (isStandaloneMode()) {
+        markPwaInstalled();
+        updateInstallAppButton();
+        showToast(currentLanguage === 'ko' ? '이미 앱으로 설치되어 있습니다.' : 'Already installed as an app.');
+        return;
+    }
+
+    if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        try {
+            const choice = await deferredInstallPrompt.userChoice;
+            if (choice && choice.outcome === 'accepted') {
+                markPwaInstalled();
+            }
+        } catch (error) {
+            console.warn('[PWA] 설치 프롬프트 처리 오류:', error);
+        }
+        deferredInstallPrompt = null;
+        updateInstallAppButton();
+        return;
+    }
+
+    if (isIosDevice()) {
+        showToast(currentLanguage === 'ko'
+            ? 'Safari 공유 버튼에서 "홈 화면에 추가"를 선택해주세요.'
+            : 'Please use Safari Share > "Add to Home Screen".');
+        return;
+    }
+
+    showToast(currentLanguage === 'ko'
+        ? '브라우저 메뉴에서 "앱 설치" 또는 "홈 화면에 추가"를 선택해주세요.'
+        : 'Please choose "Install app" or "Add to Home Screen" in your browser menu.');
+};
+
+function openInstallModal(config) {
+    const modal = document.getElementById('installPromptModal');
+    const titleEl = document.getElementById('installPromptTitle');
+    const messageEl = document.getElementById('installPromptMessage');
+    const subMessageEl = document.getElementById('installPromptSubMessage');
+    const primaryBtn = document.getElementById('installPromptPrimaryBtn');
+    const secondaryBtn = document.getElementById('installPromptSecondaryBtn');
+    if (!modal || !titleEl || !messageEl || !subMessageEl || !primaryBtn || !secondaryBtn) {
+        return Promise.resolve('secondary');
+    }
+
+    titleEl.textContent = config.title || '';
+    messageEl.textContent = config.message || '';
+    subMessageEl.textContent = config.subMessage || '';
+
+    primaryBtn.textContent = config.primaryLabel || translations[currentLanguage].install_modal_ok;
+    secondaryBtn.textContent = config.secondaryLabel || translations[currentLanguage].install_modal_later;
+    secondaryBtn.style.display = config.showSecondary ? 'inline-flex' : 'none';
+
+    if (installModalResolver) {
+        installModalResolver('secondary');
+        installModalResolver = null;
+    }
+    modal.style.display = 'flex';
+
+    return new Promise((resolve) => {
+        installModalResolver = resolve;
+    });
+}
+
+function closeInstallModal(action) {
+    const modal = document.getElementById('installPromptModal');
+    if (modal) modal.style.display = 'none';
+    if (installModalResolver) {
+        installModalResolver(action);
+        installModalResolver = null;
+    }
+}
+
+function normalizeEmail(value) {
+    return (value || '').toLowerCase().trim();
+}
+
+function normalizeName(value) {
+    return (value || '').trim();
+}
+
+function isAnonymousName(name) {
+    return /^(익명|anonymous)$/i.test(normalizeName(name));
+}
+
+function getInstallPathMessage() {
+    const isMobile = /android|iphone|ipad|ipod/i.test(window.navigator.userAgent);
+    const t = translations[currentLanguage];
+    return isMobile ? t.install_modal_path_mobile : t.install_modal_path_pc;
+}
+
+function canDeleteAuthoredPost(post) {
+    if (!currentUser || !post) return false;
+    if (isUserAdmin(currentUser)) return true;
+
+    const currentEmail = normalizeEmail(currentUser.email);
+    const postEmailCandidates = [
+        post.authorEmail,
+        post.email,
+        post.createdByEmail,
+        post.userEmail
+    ].map(normalizeEmail).filter(Boolean);
+    if (currentEmail && postEmailCandidates.includes(currentEmail)) return true;
+
+    // 익명 글은 이름 비교만으로 삭제 권한을 허용하지 않는다.
+    if (post.isAnonymous) return false;
+
+    const currentName = normalizeName(currentUser.name);
+    const postNameCandidates = [
+        post.authorName,
+        post.name,
+        post.createdByName,
+        post.userName
+    ].map(normalizeName).filter(Boolean);
+    return !!currentName && postNameCandidates.some((name) => !isAnonymousName(name) && name === currentName);
+}
+
+function canDeletePrayerPost(prayer) {
+    return canDeleteAuthoredPost(prayer);
+}
+
+function canDeleteTestimonyPost(testimony) {
+    return canDeleteAuthoredPost(testimony);
+}
+
+async function showInstallGuideAfterLogin() {
+    // 앱 설치 안내 기능 비활성화
+    return;
+}
 
 // 언어 설정 불러오기
 function loadLanguagePreference() {
@@ -506,6 +796,7 @@ function applyLanguage(lang) {
     updateTextContent('navLogin', t.nav_login);
     updateTextContent('navPrayers', t.nav_prayers);
     updateTextContent('navTestimonies', t.nav_testimonies);
+    updateTextContent('navGallery', t.nav_gallery);
     updateTextContent('navNotices', t.nav_notices);
     updateTextContent('navAdmin', t.nav_admin);
     
@@ -531,17 +822,19 @@ function applyLanguage(lang) {
     
     // 사용자 정보 텍스트 업데이트
     if (currentUser) {
-        const welcomeText = document.querySelector('.welcome-text');
-        if (welcomeText && lang === 'en') {
-            welcomeText.innerHTML = `${t.welcome}, <strong>${currentUser.name}</strong>`;
-        } else if (welcomeText && lang === 'ko') {
-            welcomeText.innerHTML = `${t.welcome}, <strong id="userName">${currentUser.name}</strong>님`;
-        }
+        document.querySelectorAll('.welcome-text').forEach((welcomeText) => {
+            if (lang === 'en') {
+                welcomeText.innerHTML = `${t.welcome}, <strong>${currentUser.name}</strong>`;
+            } else {
+                welcomeText.innerHTML = `${t.welcome}, <strong>${currentUser.name}</strong>님`;
+            }
+        });
     }
     
     // 로그아웃 버튼
-    const logoutBtn = document.querySelector('.logout-btn');
-    if (logoutBtn) logoutBtn.textContent = t.btn_logout;
+    document.querySelectorAll('.logout-btn').forEach((logoutBtn) => {
+        logoutBtn.textContent = t.btn_logout;
+    });
     
     // 섹션 타이틀들
     const scheduleTitle = document.querySelector('#schedule .section-title');
@@ -549,6 +842,7 @@ function applyLanguage(lang) {
     const registerTitle = document.querySelector('#register .section-title');
     const prayersTitle = document.querySelector('#prayers .section-title');
     const testimoniesTitle = document.querySelector('#testimonies .section-title');
+    const galleryTitle = document.querySelector('#gallery .section-title');
     const noticesTitle = document.querySelector('#notices .section-title');
     const adminTitle = document.querySelector('#admin .section-title');
     
@@ -557,6 +851,7 @@ function applyLanguage(lang) {
     if (registerTitle) registerTitle.textContent = t.register_title;
     if (prayersTitle) prayersTitle.textContent = t.prayers_title;
     if (testimoniesTitle) testimoniesTitle.textContent = t.testimonies_title;
+    if (galleryTitle) galleryTitle.textContent = t.gallery_title;
     if (noticesTitle) noticesTitle.textContent = t.notices_title;
     if (adminTitle) adminTitle.textContent = t.admin_title;
     
@@ -583,6 +878,15 @@ function applyLanguage(lang) {
     if (testimonyNameInput) testimonyNameInput.placeholder = t.prayers_name;
     if (testimonyTitleInput) testimonyTitleInput.placeholder = t.prayers_title_field;
     if (testimonyContentInput) testimonyContentInput.placeholder = t.testimonies_content;
+
+    // 갤러리 폼 번역
+    updateTextContent('galleryFormTitle', t.gallery_form_title);
+    updateTextContent('galleryUploadLabel', t.gallery_upload_label + ' ');
+    updateTextContent('galleryDescriptionLabel', t.gallery_description_label + ' ');
+    updateTextContent('galleryLimitHelp', t.gallery_limit_note);
+    updateTextContent('gallerySubmitBtn', t.gallery_submit);
+    const galleryDescriptionInput = document.getElementById('galleryDescription');
+    if (galleryDescriptionInput) galleryDescriptionInput.placeholder = t.gallery_description_placeholder;
     
     // 공지사항 폼 번역
     updateTextContent('noticeFormTitle', t.notices_form_title);
@@ -628,6 +932,7 @@ function applyLanguage(lang) {
     if (currentUser) {
         renderPrayers();
         renderTestimonies();
+        renderGalleryPosts();
         renderNotices();
         renderMembers();
     }
@@ -765,20 +1070,29 @@ function isUserAdmin(user) {
 
 // 로그인한 사용자 UI 업데이트
 function updateUIForLoggedInUser() {
-    // 로그인 정보 표시
-    const userInfo = document.getElementById('userInfo');
-    const userName = document.getElementById('userName');
-    
-    if (userInfo) userInfo.style.display = 'flex';
-    if (userName) userName.textContent = currentUser.name;
+    // 로그인 정보 표시 (데스크톱/모바일 배너 동시 지원)
+    const userInfos = ['userInfo', 'userInfoDesktop']
+        .map((id) => document.getElementById(id))
+        .filter(Boolean);
+    userInfos.forEach((el) => {
+        el.style.display = 'flex';
+    });
+    const userNameEls = ['userName', 'userNameDesktop']
+        .map((id) => document.getElementById(id))
+        .filter(Boolean);
+    userNameEls.forEach((el) => {
+        el.textContent = currentUser.name;
+    });
     
     // 관리자 확인
     const isAdmin = isUserAdmin(currentUser);
     
     if (isAdmin) {
         // 관리자 배지 표시
-        const adminBadge = document.getElementById('adminBadge');
-        if (adminBadge) adminBadge.style.display = 'inline-block';
+        ['adminBadge', 'adminBadgeDesktop'].forEach((id) => {
+            const adminBadge = document.getElementById(id);
+            if (adminBadge) adminBadge.style.display = 'inline-flex';
+        });
         
         // 관리자 메뉴 표시
         const navAdmin = document.getElementById('navAdmin');
@@ -805,16 +1119,18 @@ function updateUIForLoggedInUser() {
     const navRegister = document.getElementById('navRegister');
     const navPrayers = document.getElementById('navPrayers');
     const navTestimonies = document.getElementById('navTestimonies');
+    const navGallery = document.getElementById('navGallery');
     const navNotices = document.getElementById('navNotices');
     
     if (navLogin) navLogin.style.display = 'none';
     if (navRegister) navRegister.style.display = 'none';
     if (navPrayers) navPrayers.style.display = 'block';
     if (navTestimonies) navTestimonies.style.display = 'block';
+    if (navGallery) navGallery.style.display = 'block';
     if (navNotices) navNotices.style.display = 'block';
     
     // 보호된 섹션 표시 (기도제목, 간증, 공지사항)
-    const protectedSections = ['prayers', 'testimonies', 'notices'];
+    const protectedSections = ['prayers', 'testimonies', 'gallery', 'notices'];
     protectedSections.forEach(sectionId => {
         const section = document.getElementById(sectionId);
         if (section) section.style.display = 'block';
@@ -837,13 +1153,17 @@ function updateUIForLoggedInUser() {
 // 로그아웃한 사용자 UI 업데이트
 function updateUIForLoggedOutUser() {
     // 로그인 정보 숨김
-    const userInfo = document.getElementById('userInfo');
-    if (userInfo) userInfo.style.display = 'none';
+    ['userInfo', 'userInfoDesktop'].forEach((id) => {
+        const userInfo = document.getElementById(id);
+        if (userInfo) userInfo.style.display = 'none';
+    });
     
     // 관리자 배지와 메뉴 숨김
     const adminBadge = document.getElementById('adminBadge');
+    const adminBadgeDesktop = document.getElementById('adminBadgeDesktop');
     const navAdmin = document.getElementById('navAdmin');
     if (adminBadge) adminBadge.style.display = 'none';
+    if (adminBadgeDesktop) adminBadgeDesktop.style.display = 'none';
     if (navAdmin) navAdmin.style.display = 'none';
     
     // 회원 목록 숨김 (로그아웃 상태)
@@ -855,16 +1175,18 @@ function updateUIForLoggedOutUser() {
     const navRegister = document.getElementById('navRegister');
     const navPrayers = document.getElementById('navPrayers');
     const navTestimonies = document.getElementById('navTestimonies');
+    const navGallery = document.getElementById('navGallery');
     const navNotices = document.getElementById('navNotices');
     
     if (navLogin) navLogin.style.display = 'block';
     if (navRegister) navRegister.style.display = 'block';
     if (navPrayers) navPrayers.style.display = 'none';
     if (navTestimonies) navTestimonies.style.display = 'none';
+    if (navGallery) navGallery.style.display = 'none';
     if (navNotices) navNotices.style.display = 'none';
     
     // 보호된 섹션 숨김 (기도제목, 간증, 공지사항, 관리자)
-    const protectedSections = ['prayers', 'testimonies', 'notices', 'admin'];
+    const protectedSections = ['prayers', 'testimonies', 'gallery', 'notices', 'admin'];
     protectedSections.forEach(sectionId => {
         const section = document.getElementById(sectionId);
         if (section) section.style.display = 'none';
@@ -892,6 +1214,7 @@ function initializeApp() {
     if (currentUser) {
         loadPrayers();
         loadTestimonies();
+        loadGalleryPosts();
         loadNotices();
         loadMembers(); // 모든 로그인한 사용자가 회원 목록 볼 수 있음
         
@@ -921,6 +1244,45 @@ function setupEventListeners() {
     
     // 간증 폼 제출
     document.getElementById('testimonyForm').addEventListener('submit', handleTestimonySubmit);
+
+    // 사역 사진 갤러리 폼 제출
+    document.getElementById('galleryForm').addEventListener('submit', handleGallerySubmit);
+    document.getElementById('galleryList').addEventListener('click', handleGalleryListClick);
+
+    // 갤러리 파일 선택 미리보기
+    document.getElementById('galleryImages').addEventListener('change', function () {
+        const file = this.files && this.files[0];
+        const preview = document.getElementById('galleryImagePreview');
+        const previewImg = document.getElementById('galleryPreviewImg');
+        const previewName = document.getElementById('galleryPreviewName');
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                previewImg.src = e.target.result;
+                previewName.textContent = file.name;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        } else {
+            preview.style.display = 'none';
+        }
+    });
+
+    // 확인 모달 버튼
+    const confirmOkBtn = document.getElementById('confirmModalOkBtn');
+    const confirmCancelBtn = document.getElementById('confirmModalCancelBtn');
+    if (confirmOkBtn) confirmOkBtn.addEventListener('click', () => closeConfirmModal(true));
+    if (confirmCancelBtn) confirmCancelBtn.addEventListener('click', () => closeConfirmModal(false));
+
+    // 앱 설치 안내 모달 버튼
+    const installPrimaryBtn = document.getElementById('installPromptPrimaryBtn');
+    const installSecondaryBtn = document.getElementById('installPromptSecondaryBtn');
+    if (installPrimaryBtn) {
+        installPrimaryBtn.addEventListener('click', () => closeInstallModal('primary'));
+    }
+    if (installSecondaryBtn) {
+        installSecondaryBtn.addEventListener('click', () => closeInstallModal('secondary'));
+    }
     
     // 일정 수정 버튼
     const scheduleEditBtn = document.getElementById('scheduleEditBtn');
@@ -993,6 +1355,7 @@ async function handleLoginSubmit(e) {
         // 데이터 로드
         await loadPrayers();
         await loadTestimonies();
+        await loadGalleryPosts();
         await loadNotices();
         await loadMembers();
         await loadAdminData();
@@ -1002,6 +1365,7 @@ async function handleLoginSubmit(e) {
         
         // 성공 메시지
         showToast(`환영합니다, 최지연 권사님! 🙏 관리자로 로그인되었습니다.`);
+        await showInstallGuideAfterLogin();
         
         // 기도제목 섹션으로 이동
         setTimeout(() => {
@@ -1114,6 +1478,7 @@ async function handleLoginSubmit(e) {
         // 데이터 로드
         await loadPrayers();
         await loadTestimonies();
+        await loadGalleryPosts();
         await loadNotices();
         await loadMembers(); // 모든 로그인한 사용자가 회원 목록 볼 수 있음
         
@@ -1127,6 +1492,7 @@ async function handleLoginSubmit(e) {
         
         // 성공 메시지
         showToast(`환영합니다, ${member.name}님! 🙏`);
+        await showInstallGuideAfterLogin();
         
         // 기도제목 섹션으로 이동
         setTimeout(() => {
@@ -1139,19 +1505,13 @@ async function handleLoginSubmit(e) {
 }
 
 // 로그아웃 처리
-function handleLogout() {
-    if (confirm('로그아웃 하시겠습니까?')) {
-        currentUser = null;
-        localStorage.removeItem('currentUser');
-        
-        // UI 업데이트
-        updateUIForLoggedOutUser();
-        
-        // 홈으로 이동
-        scrollToSection('home');
-        
-        showToast('로그아웃 되었습니다.');
-    }
+async function handleLogout() {
+    if (!await showConfirm('로그아웃 하시겠습니까?')) return;
+    currentUser = null;
+    localStorage.removeItem('currentUser');
+    updateUIForLoggedOutUser();
+    scrollToSection('home');
+    showToast('로그아웃 되었습니다.');
 }
 
 // 네비게이션 클릭 처리
@@ -1255,8 +1615,8 @@ function renderMembers() {
         <div class="member-card fade-in-up ${isMemberAdmin ? 'admin-member' : ''}" data-id="${member.id}">
             <div class="member-card-header">
                 <div class="member-name">
-                    ${escapeHtml(member.name)}
-                    ${isMemberAdmin ? '<span class="inline-badge">🙏 기도인도자</span><span class="inline-badge">👑 관리자</span>' : ''}
+                    <div class="member-name-text">${escapeHtml(member.name)}</div>
+                    ${isMemberAdmin ? '<div class="member-role-row"><span class="inline-badge">🙏 기도인도자</span><span class="inline-badge">👑 관리자</span></div>' : ''}
                 </div>
             </div>
             <div class="member-info">
@@ -1375,9 +1735,7 @@ async function handleRegisterSubmit(e) {
 
 // 회원 삭제
 async function deleteMember(id) {
-    if (!confirm('이 회원을 삭제하시겠습니까?')) {
-        return;
-    }
+    if (!await showConfirm('이 회원을 삭제하시겠습니까?')) return;
     
     try {
         const response = await fetch(`tables/members/${id}`, {
@@ -1429,11 +1787,13 @@ async function renderPrayers() {
     }
     
     const currentUserKey = getCurrentUserKey();
+    const prayedItems = getUserActionList('prayedItemsByUser', currentUserKey);
     
     // 각 기도제목을 번역하고 HTML 생성
     const translatedPrayers = await Promise.all(currentPrayers.map(async (prayer) => {
-        const prayerUserIds = Array.isArray(prayer.prayerUserIds) ? prayer.prayerUserIds : [];
-        const hasPrayed = currentUserKey ? prayerUserIds.includes(currentUserKey) : false;
+        const hasPrayed = currentUserKey ? prayedItems.includes(prayer.id) : false;
+        const isProcessing = prayerClickInFlight.has(prayer.id);
+        const canDelete = canDeletePrayerPost(prayer);
         const prayBtnClass = hasPrayed ? 'action-button pray-btn prayed' : 'action-button pray-btn';
         const checkIcon = hasPrayed ? '<i class="fas fa-check"></i> ' : '';
         const anonymousText = t.anonymous;
@@ -1460,12 +1820,14 @@ async function renderPrayers() {
             </div>
             <p class="item-content">${escapeHtml(displayContent)}</p>
             <div class="item-actions">
-                <button class="${prayBtnClass}" onclick="prayForItem('${prayer.id}')" ${hasPrayed ? 'disabled' : ''}>
+                <button class="${prayBtnClass}" onclick="prayForItem('${prayer.id}')" ${isProcessing ? 'disabled' : ''}>
                     ${checkIcon}<i class="fas fa-praying-hands"></i> ${t.prayers_button}
                 </button>
+                ${canDelete ? `
                 <button class="action-button delete" onclick="deletePrayer('${prayer.id}')">
-                    <i class="fas fa-trash"></i> ${t.btn_delete}
+                    <i class="fas fa-trash"></i>
                 </button>
+                ` : ''}
             </div>
         </div>
     `;
@@ -1496,6 +1858,8 @@ async function handlePrayerSubmit(e) {
             },
             body: JSON.stringify({
                 name: isAnonymous ? '익명' : (name || '익명'),
+                authorName: currentUser ? currentUser.name : (name || '익명'),
+                authorEmail: currentUser ? (currentUser.email || '') : '',
                 title: title,
                 content: content,
                 isAnonymous: isAnonymous,
@@ -1524,25 +1888,26 @@ async function handlePrayerSubmit(e) {
 
 // 기도했어요 클릭 (토글 기능)
 async function prayForItem(id) {
+    if (prayerClickInFlight.has(id)) {
+        return;
+    }
+
     const currentUserKey = getCurrentUserKey();
     if (!currentUserKey) {
         showToast('로그인 후 이용할 수 있습니다.');
         return;
     }
     
+    prayerClickInFlight.add(id);
     try {
         const prayer = currentPrayers.find(p => p.id === id);
         if (!prayer) return;
-        const prayerUserIds = Array.isArray(prayer.prayerUserIds) ? prayer.prayerUserIds : [];
+        const prayedItems = getUserActionList('prayedItemsByUser', currentUserKey);
 
-        // 가입자 1인당 1회만 허용
-        if (prayerUserIds.includes(currentUserKey)) {
-            showToast('이미 기도에 참여하셨어요 🙏');
-            return;
-        }
-        
-        const newCount = (prayer.prayerCount || 0) + 1;
-        const nextPrayerUserIds = [...prayerUserIds, currentUserKey];
+        const hasPrayed = prayedItems.includes(id);
+        const newCount = hasPrayed
+            ? Math.max(0, (prayer.prayerCount || 0) - 1)
+            : (prayer.prayerCount || 0) + 1;
         
         const updateMethod = API_BASE_URL ? 'PUT' : 'PATCH';
         const response = await fetch(`tables/prayers/${id}`, {
@@ -1551,25 +1916,38 @@ async function prayForItem(id) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                prayerCount: newCount,
-                prayerUserIds: nextPrayerUserIds
+                prayerCount: newCount
             })
         });
         
         if (response.ok) {
-            showToast('기도해주셔서 감사합니다! 🙏');
+            const nextPrayedItems = hasPrayed
+                ? prayedItems.filter(itemId => itemId !== id)
+                : [...prayedItems, id];
+            saveUserActionList('prayedItemsByUser', currentUserKey, nextPrayedItems);
+            prayer.prayerCount = newCount;
+            showToast(hasPrayed ? '기도 참여를 취소했습니다' : '기도해주셔서 감사합니다! 🙏');
             await loadPrayers();
+        } else {
+            throw new Error(`기도 카운트 업데이트 실패 (${response.status})`);
         }
     } catch (error) {
         console.error('기도 카운트 업데이트 오류:', error);
+        showToast('기도 참여 처리 중 오류가 발생했습니다.');
+    } finally {
+        prayerClickInFlight.delete(id);
     }
 }
 
 // 기도 제목 삭제
 async function deletePrayer(id) {
-    if (!confirm('이 기도 제목을 삭제하시겠습니까?')) {
+    const targetPrayer = currentPrayers.find((prayer) => prayer.id === id);
+    if (!canDeletePrayerPost(targetPrayer)) {
+        alert('작성자 본인 또는 관리자만 삭제할 수 있습니다.');
         return;
     }
+
+    if (!await showConfirm('이 기도 제목을 삭제하시겠습니까?')) return;
     
     try {
         const response = await fetch(`tables/prayers/${id}`, {
@@ -1621,12 +1999,14 @@ async function renderTestimonies() {
     }
     
     const currentUserKey = getCurrentUserKey();
+    const likedItems = getUserActionList('likedTestimoniesByUser', currentUserKey);
     const anonymousText = t.anonymous;
     
     // 각 간증을 번역하고 HTML 생성
     const translatedTestimonies = await Promise.all(currentTestimonies.map(async (testimony) => {
-        const likeUserIds = Array.isArray(testimony.likeUserIds) ? testimony.likeUserIds : [];
-        const hasLiked = currentUserKey ? likeUserIds.includes(currentUserKey) : false;
+        const hasLiked = currentUserKey ? likedItems.includes(testimony.id) : false;
+        const isProcessing = testimonyLikeInFlight.has(testimony.id);
+        const canDelete = canDeleteTestimonyPost(testimony);
         const likeBtnClass = hasLiked ? 'action-button like-btn liked' : 'action-button like-btn';
         const heartIcon = hasLiked ? 'fas fa-heart' : 'far fa-heart';
         
@@ -1651,12 +2031,14 @@ async function renderTestimonies() {
             </div>
             <p class="item-content">${escapeHtml(displayContent)}</p>
             <div class="item-actions">
-                <button class="${likeBtnClass}" onclick="likeTestimony('${testimony.id}')" ${hasLiked ? 'disabled' : ''}>
+                <button class="${likeBtnClass}" onclick="likeTestimony('${testimony.id}')" ${isProcessing ? 'disabled' : ''}>
                     <i class="${heartIcon}"></i> ${t.testimonies_button}
                 </button>
+                ${canDelete ? `
                 <button class="action-button delete" onclick="deleteTestimony('${testimony.id}')">
-                    <i class="fas fa-trash"></i> ${t.btn_delete}
+                    <i class="fas fa-trash"></i>
                 </button>
+                ` : ''}
             </div>
         </div>
     `;
@@ -1687,6 +2069,8 @@ async function handleTestimonySubmit(e) {
             },
             body: JSON.stringify({
                 name: isAnonymous ? '익명' : (name || '익명'),
+                authorName: currentUser ? currentUser.name : (name || '익명'),
+                authorEmail: currentUser ? (currentUser.email || '') : '',
                 title: title,
                 content: content,
                 isAnonymous: isAnonymous,
@@ -1715,25 +2099,26 @@ async function handleTestimonySubmit(e) {
 
 // 간증 좋아요 클릭 (토글 기능)
 async function likeTestimony(id) {
+    if (testimonyLikeInFlight.has(id)) {
+        return;
+    }
+
     const currentUserKey = getCurrentUserKey();
     if (!currentUserKey) {
         showToast('로그인 후 이용할 수 있습니다.');
         return;
     }
     
+    testimonyLikeInFlight.add(id);
     try {
         const testimony = currentTestimonies.find(t => t.id === id);
         if (!testimony) return;
-        const likeUserIds = Array.isArray(testimony.likeUserIds) ? testimony.likeUserIds : [];
+        const likedItems = getUserActionList('likedTestimoniesByUser', currentUserKey);
 
-        // 가입자 1인당 1회만 허용
-        if (likeUserIds.includes(currentUserKey)) {
-            showToast('이미 할렐루야에 참여하셨어요 🎉');
-            return;
-        }
-
-        const newCount = (testimony.likeCount || 0) + 1;
-        const nextLikeUserIds = [...likeUserIds, currentUserKey];
+        const hasLiked = likedItems.includes(id);
+        const newCount = hasLiked
+            ? Math.max(0, (testimony.likeCount || 0) - 1)
+            : (testimony.likeCount || 0) + 1;
         
         const updateMethod = API_BASE_URL ? 'PUT' : 'PATCH';
         const response = await fetch(`tables/testimonies/${id}`, {
@@ -1742,25 +2127,38 @@ async function likeTestimony(id) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                likeCount: newCount,
-                likeUserIds: nextLikeUserIds
+                likeCount: newCount
             })
         });
         
         if (response.ok) {
-            showToast('할렐루야! 함께 기뻐합니다! 🎉');
+            const nextLikedItems = hasLiked
+                ? likedItems.filter(itemId => itemId !== id)
+                : [...likedItems, id];
+            saveUserActionList('likedTestimoniesByUser', currentUserKey, nextLikedItems);
+            testimony.likeCount = newCount;
+            showToast(hasLiked ? '할렐루야 참여를 취소했습니다' : '할렐루야! 함께 기뻐합니다! 🎉');
             await loadTestimonies();
+        } else {
+            throw new Error(`좋아요 업데이트 실패 (${response.status})`);
         }
     } catch (error) {
         console.error('좋아요 업데이트 오류:', error);
+        showToast('할렐루야 처리 중 오류가 발생했습니다.');
+    } finally {
+        testimonyLikeInFlight.delete(id);
     }
 }
 
 // 간증 삭제
 async function deleteTestimony(id) {
-    if (!confirm('이 간증을 삭제하시겠습니까?')) {
+    const targetTestimony = currentTestimonies.find((testimony) => testimony.id === id);
+    if (!canDeleteTestimonyPost(targetTestimony)) {
+        alert('작성자 본인 또는 관리자만 삭제할 수 있습니다.');
         return;
     }
+
+    if (!await showConfirm('이 간증을 삭제하시겠습니까?')) return;
     
     try {
         const response = await fetch(`tables/testimonies/${id}`, {
@@ -1774,6 +2172,325 @@ async function deleteTestimony(id) {
     } catch (error) {
         console.error('간증 삭제 오류:', error);
         alert('삭제 중 오류가 발생했습니다.');
+    }
+}
+
+// 사역 사진 갤러리 로드
+async function loadGalleryPosts() {
+    const galleryList = document.getElementById('galleryList');
+    if (galleryList) {
+        galleryList.innerHTML = `<div class="loading">${translations[currentLanguage].gallery_loading}</div>`;
+    }
+
+    if (!isGalleryRemoteAvailable) {
+        currentGalleryPosts = getLocalGalleryPosts();
+        renderGalleryPosts();
+        return;
+    }
+
+    try {
+        const response = await fetchWithRetry('tables/gallery_posts?limit=100&sort=-created_at');
+        const data = await response.json();
+        const remotePosts = data.data || [];
+        const localPosts = getLocalGalleryPosts();
+        currentGalleryPosts = [...localPosts, ...remotePosts].sort((a, b) => {
+            const aTime = new Date(a.created_at || a.date || 0).getTime();
+            const bTime = new Date(b.created_at || b.date || 0).getTime();
+            return bTime - aTime;
+        });
+        renderGalleryPosts();
+    } catch (error) {
+        const errorMessage = String(error && error.message ? error.message : error);
+        if (errorMessage.includes('no such table: gallery_posts')) {
+            isGalleryRemoteAvailable = false;
+            console.warn('[GALLERY] gallery_posts 테이블이 없어 로컬 모드로 전환합니다.');
+        } else {
+            console.error('사역 사진 갤러리를 불러오는 중 오류:', error);
+        }
+        currentGalleryPosts = getLocalGalleryPosts();
+        renderGalleryPosts();
+    }
+}
+
+function getLocalGalleryPosts() {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(GALLERY_LOCAL_STORAGE_KEY) || '[]');
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+        console.error('로컬 갤러리 데이터 파싱 오류:', error);
+        return [];
+    }
+}
+
+function saveLocalGalleryPosts(posts) {
+    localStorage.setItem(GALLERY_LOCAL_STORAGE_KEY, JSON.stringify(posts));
+}
+
+function addLocalGalleryPost(post) {
+    const localPosts = getLocalGalleryPosts();
+    localPosts.unshift(post);
+    saveLocalGalleryPosts(localPosts);
+}
+
+function canDeleteGalleryPost(post) {
+    if (!currentUser || !post) return false;
+    if (isUserAdmin(currentUser)) return true;
+
+    const currentEmail = (currentUser.email || '').toLowerCase().trim();
+    const postEmail = (post.authorEmail || '').toLowerCase().trim();
+    if (currentEmail && postEmail && currentEmail === postEmail) return true;
+
+    return (currentUser.name || '').trim() && (currentUser.name || '').trim() === (post.authorName || '').trim();
+}
+
+function parseGalleryImages(rawImages) {
+    if (Array.isArray(rawImages)) {
+        return rawImages.filter(Boolean);
+    }
+    if (typeof rawImages === 'string') {
+        try {
+            const parsed = JSON.parse(rawImages);
+            return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+        } catch (error) {
+            console.warn('갤러리 이미지 파싱 실패:', error);
+        }
+    }
+    return [];
+}
+
+function renderGalleryPosts() {
+    const galleryList = document.getElementById('galleryList');
+    if (!galleryList) return;
+
+    const t = translations[currentLanguage];
+    if (!currentGalleryPosts || currentGalleryPosts.length === 0) {
+        galleryList.innerHTML = `<div class="loading">${t.gallery_empty}</div>`;
+        return;
+    }
+
+    galleryList.innerHTML = currentGalleryPosts.map((post) => {
+        const imageUrls = parseGalleryImages(post.images);
+        const safeDescription = escapeHtml(post.description || '');
+        const author = escapeHtml(post.authorName || post.name || '익명');
+        const createdAt = formatDate(post.created_at || post.date || new Date().toISOString());
+        const canDelete = canDeleteGalleryPost(post);
+
+        return `
+            <article class="gallery-item fade-in-up">
+                <div class="gallery-item-header">
+                    <div class="gallery-author">
+                        <i class="fas fa-user-circle"></i>
+                        <span>${author}</span>
+                        ${post.localOnly ? `<span class="gallery-local-badge">${t.gallery_saved_local}</span>` : ''}
+                    </div>
+                    <div class="gallery-date">
+                        <i class="fas fa-calendar"></i>
+                        <span>${createdAt}</span>
+                    </div>
+                </div>
+                <p class="gallery-description">${safeDescription}</p>
+                <div class="gallery-images">
+                    ${imageUrls.map((url, index) => `<div class="gallery-image-wrap"><img src="${url}" alt="gallery-photo-${index + 1}" loading="lazy" onclick="openLightbox(this.src)"></div>`).join('')}
+                </div>
+                ${canDelete ? `
+                    <div class="item-actions gallery-item-actions">
+                        <button class="action-button delete gallery-delete-btn" data-post-id="${post.id}" data-local-only="${post.localOnly ? '1' : '0'}">
+                            <i class="fas fa-trash"></i> ${t.btn_delete}
+                        </button>
+                    </div>
+                ` : ''}
+            </article>
+        `;
+    }).join('');
+}
+
+function removeLocalGalleryPostById(id) {
+    const localPosts = getLocalGalleryPosts();
+    const next = localPosts.filter((post) => String(post.id) !== String(id));
+    saveLocalGalleryPosts(next);
+}
+
+async function deleteGalleryPost(postId, isLocalOnly) {
+    const targetPost = currentGalleryPosts.find((post) => String(post.id) === String(postId));
+    if (!targetPost) {
+        showToast('이미 삭제되었거나 게시물을 찾을 수 없습니다.');
+        return;
+    }
+    if (!canDeleteGalleryPost(targetPost)) {
+        alert('본인이 올린 사진 또는 관리자만 삭제할 수 있습니다.');
+        return;
+    }
+    if (!await showConfirm('이 사진 게시물을 삭제하시겠습니까?')) return;
+
+    try {
+        if (isLocalOnly) {
+            removeLocalGalleryPostById(postId);
+            await loadGalleryPosts();
+            showToast('로컬 갤러리 게시물이 삭제되었습니다.');
+            return;
+        }
+
+        const response = await fetch(`tables/gallery_posts/${postId}`, {
+            method: 'DELETE'
+        });
+        if (!response.ok && response.status !== 204) {
+            throw new Error(`삭제 실패 (${response.status})`);
+        }
+        await loadGalleryPosts();
+        showToast('갤러리 게시물이 삭제되었습니다.');
+    } catch (error) {
+        console.error('갤러리 게시물 삭제 오류:', error);
+        alert(`삭제 중 오류가 발생했습니다.\n\n${error.message}`);
+    }
+}
+
+async function handleGalleryListClick(e) {
+    const deleteBtn = e.target.closest('.gallery-delete-btn');
+    if (!deleteBtn) return;
+    const postId = deleteBtn.dataset.postId;
+    const isLocalOnly = deleteBtn.dataset.localOnly === '1';
+    if (!postId) return;
+    await deleteGalleryPost(postId, isLocalOnly);
+}
+
+function openLightbox(src) {
+    const lb = document.getElementById('galleryLightbox');
+    const img = document.getElementById('galleryLightboxImg');
+    if (!lb || !img) return;
+    img.src = src;
+    lb.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeLightbox() {
+    const lb = document.getElementById('galleryLightbox');
+    if (lb) lb.style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+function compressImageFileToDataUrl(file, maxWidth = 960, quality = 0.75) {
+    return new Promise((resolve, reject) => {
+        if (!file || !file.type.startsWith('image/')) {
+            reject(new Error('이미지 파일만 업로드할 수 있습니다.'));
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            const img = new Image();
+            img.onload = () => {
+                const ratio = img.width > maxWidth ? (maxWidth / img.width) : 1;
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.round(img.width * ratio);
+                canvas.height = Math.round(img.height * ratio);
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            };
+            img.onerror = () => reject(new Error('이미지 처리 중 오류가 발생했습니다.'));
+            img.src = reader.result;
+        };
+        reader.onerror = () => reject(new Error('이미지 파일을 읽지 못했습니다.'));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function handleGallerySubmit(e) {
+    e.preventDefault();
+
+    if (!currentUser) {
+        alert('로그인 후 이용 가능합니다.');
+        return;
+    }
+
+    const descriptionInput = document.getElementById('galleryDescription');
+    const imagesInput = document.getElementById('galleryImages');
+    const description = descriptionInput.value.trim();
+    const files = Array.from(imagesInput.files || []);
+
+    if (!description) {
+        alert('설명을 입력해주세요.');
+        return;
+    }
+
+    if (files.length === 0) {
+        alert('최소 1장의 사진을 업로드해주세요.');
+        return;
+    }
+
+    if (files.length > 1) {
+        alert('사진은 한 번에 1장만 업로드할 수 있습니다.');
+        return;
+    }
+
+    const submitBtn = document.getElementById('gallerySubmitBtn');
+    const submitText = document.getElementById('gallerySubmitText');
+    const submitSpinner = document.getElementById('gallerySubmitSpinner');
+    const setLoading = (on) => {
+        submitBtn.disabled = on;
+        if (submitText) submitText.style.display = on ? 'none' : '';
+        if (submitSpinner) submitSpinner.style.display = on ? '' : 'none';
+    };
+
+    setLoading(true);
+    let imageDataUrls = [];
+    try {
+        imageDataUrls = await Promise.all(files.map((file) => compressImageFileToDataUrl(file)));
+
+        if (!isGalleryRemoteAvailable) {
+            throw new Error('gallery_posts table unavailable');
+        }
+
+        const payload = {
+            authorName: currentUser.name || '익명',
+            authorEmail: currentUser.email || '',
+            description: description,
+            images: JSON.stringify(imageDataUrls),
+            date: new Date().toISOString()
+        };
+
+        const response = await fetch('tables/gallery_posts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            throw new Error(`갤러리 등록 실패 (${response.status})`);
+        }
+
+        document.getElementById('galleryForm').reset();
+        document.getElementById('galleryImagePreview').style.display = 'none';
+        showToast(translations[currentLanguage].gallery_save_success);
+        await loadGalleryPosts();
+    } catch (error) {
+        const errorMessage = String(error && error.message ? error.message : error);
+        if (errorMessage.includes('no such table: gallery_posts') || errorMessage.includes('gallery_posts table unavailable')) {
+            isGalleryRemoteAvailable = false;
+            console.warn('[GALLERY] 원격 저장소 미준비 상태, 로컬 저장으로 처리합니다.');
+        } else {
+            console.error('갤러리 등록 오류:', error);
+        }
+        const localPost = {
+            id: `local-${Date.now()}`,
+            authorName: currentUser.name || '익명',
+            authorEmail: currentUser.email || '',
+            description: description,
+            images: imageDataUrls,
+            date: new Date().toISOString(),
+            localOnly: true
+        };
+        addLocalGalleryPost(localPost);
+
+        document.getElementById('galleryForm').reset();
+        document.getElementById('galleryImagePreview').style.display = 'none';
+        showToast(translations[currentLanguage].gallery_local_save_success);
+        await loadGalleryPosts();
+    } finally {
+        setLoading(false);
     }
 }
 
@@ -2004,9 +2721,7 @@ async function deleteNotice(id) {
         return;
     }
     
-    if (!confirm('이 공지사항을 삭제하시겠습니까?')) {
-        return;
-    }
+    if (!await showConfirm('이 공지사항을 삭제하시겠습니까?')) return;
     
     try {
         const response = await fetch(`tables/notices/${id}`, {
@@ -2060,8 +2775,8 @@ function renderAdminMembers() {
         <div class="member-card fade-in-up ${isMemberAdmin ? 'admin-member' : ''}" data-id="${member.id}">
             <div class="member-card-header">
                 <div class="member-name">
-                    ${escapeHtml(member.name)}
-                    ${isMemberAdmin ? '<span class="inline-badge">🙏 기도인도자</span><span class="inline-badge">👑 관리자</span>' : ''}
+                    <div class="member-name-text">${escapeHtml(member.name)}</div>
+                    ${isMemberAdmin ? '<div class="member-role-row"><span class="inline-badge">🙏 기도인도자</span><span class="inline-badge">👑 관리자</span></div>' : ''}
                 </div>
             </div>
             <div class="member-info">
@@ -2147,28 +2862,15 @@ function showToast(message) {
     
     // 새 토스트 생성
     const toast = document.createElement('div');
-    toast.className = 'toast';
+    toast.className = 'toast toast-enter';
     toast.textContent = message;
-    toast.style.cssText = `
-        position: fixed;
-        bottom: 100px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: linear-gradient(135deg, #667eea, #764ba2);
-        color: white;
-        padding: 1rem 2rem;
-        border-radius: 50px;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-        z-index: 10000;
-        animation: slideUp 0.3s ease-out;
-        font-weight: 600;
-    `;
     
     document.body.appendChild(toast);
     
     // 3초 후 제거
     setTimeout(() => {
-        toast.style.animation = 'slideDown 0.3s ease-out';
+        toast.classList.remove('toast-enter');
+        toast.classList.add('toast-exit');
         setTimeout(() => toast.remove(), 300);
     }, 3000);
 }
@@ -2193,33 +2895,6 @@ function scrollToTop() {
         behavior: 'smooth'
     });
 }
-
-// CSS 애니메이션 추가 (동적으로)
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideUp {
-        from {
-            transform: translateX(-50%) translateY(100px);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(-50%) translateY(0);
-            opacity: 1;
-        }
-    }
-    
-    @keyframes slideDown {
-        from {
-            transform: translateX(-50%) translateY(0);
-            opacity: 1;
-        }
-        to {
-            transform: translateX(-50%) translateY(100px);
-            opacity: 0;
-        }
-    }
-`;
-document.head.appendChild(style);
 
 // ==========================================
 // 데이터 관리 기능 (백업 & 복원)
@@ -2713,6 +3388,7 @@ async function processImportData(importData) {
         await loadMembers();
         await loadPrayers();
         await loadTestimonies();
+        await loadGalleryPosts();
         await loadNotices();
         updateAdminStats();
         
@@ -2750,6 +3426,7 @@ async function processImportData(importData) {
                     loadMembers();
                     loadPrayers();
                     loadTestimonies();
+                    loadGalleryPosts();
                     loadNotices();
                     updateAdminStats();
                 }
