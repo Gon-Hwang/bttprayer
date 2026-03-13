@@ -2368,13 +2368,15 @@ function closeLightbox() {
     document.body.style.overflow = '';
 }
 
-function compressImageFileToDataUrl(file, maxWidth = 960, quality = 0.75) {
-    return new Promise((resolve, reject) => {
+// 목표 크기(바이트) 이하가 될 때까지 품질을 낮춰가며 압축
+async function compressImageFileToDataUrl(file, maxWidth = 960, quality = 0.75) {
+    const TARGET_BYTES = 350 * 1024; // 350KB (base64 포함 ~467KB)
+
+    const dataUrl = await new Promise((resolve, reject) => {
         if (!file || !file.type.startsWith('image/')) {
             reject(new Error('이미지 파일만 업로드할 수 있습니다.'));
             return;
         }
-
         const reader = new FileReader();
         reader.onload = () => {
             const img = new Image();
@@ -2383,10 +2385,8 @@ function compressImageFileToDataUrl(file, maxWidth = 960, quality = 0.75) {
                 const canvas = document.createElement('canvas');
                 canvas.width = Math.round(img.width * ratio);
                 canvas.height = Math.round(img.height * ratio);
-
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL('image/jpeg', quality));
+                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve({ canvas, img });
             };
             img.onerror = () => reject(new Error('이미지 처리 중 오류가 발생했습니다.'));
             img.src = reader.result;
@@ -2394,6 +2394,25 @@ function compressImageFileToDataUrl(file, maxWidth = 960, quality = 0.75) {
         reader.onerror = () => reject(new Error('이미지 파일을 읽지 못했습니다.'));
         reader.readAsDataURL(file);
     });
+
+    const { canvas } = dataUrl;
+
+    // 첫 시도
+    let result = canvas.toDataURL('image/jpeg', quality);
+    if (result.length <= TARGET_BYTES * 1.37) return result; // base64는 원본의 ~1.37배
+
+    // 크기 초과 시 품질 단계적 축소
+    for (const q of [0.65, 0.55, 0.45, 0.35]) {
+        result = canvas.toDataURL('image/jpeg', q);
+        if (result.length <= TARGET_BYTES * 1.37) return result;
+    }
+
+    // 그래도 크면 해상도도 줄임
+    const smallCanvas = document.createElement('canvas');
+    smallCanvas.width = Math.round(canvas.width * 0.65);
+    smallCanvas.height = Math.round(canvas.height * 0.65);
+    smallCanvas.getContext('2d').drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
+    return smallCanvas.toDataURL('image/jpeg', 0.55);
 }
 
 async function handleGallerySubmit(e) {
@@ -2468,12 +2487,19 @@ async function handleGallerySubmit(e) {
         await loadGalleryPosts();
     } catch (error) {
         const errorMessage = String(error && error.message ? error.message : error);
-        if (errorMessage.includes('no such table: gallery_posts') || errorMessage.includes('gallery_posts table unavailable')) {
+        const isTableMissing = errorMessage.includes('no such table: gallery_posts') || errorMessage.includes('gallery_posts table unavailable');
+
+        if (isTableMissing) {
             isGalleryRemoteAvailable = false;
-            console.warn('[GALLERY] 원격 저장소 미준비 상태, 로컬 저장으로 처리합니다.');
+            console.warn('[GALLERY] gallery_posts 테이블 없음, 로컬 저장.');
         } else {
-            console.error('갤러리 등록 오류:', error);
+            console.error('[GALLERY] 서버 저장 실패:', error);
+            // 서버 저장 실패 시 사용자에게 알리고 중단 (로컬에만 저장하면 다른 기기에서 안 보임)
+            alert(`사진 서버 저장 실패: ${errorMessage}\n\n잠시 후 다시 시도해 주세요.`);
+            return;
         }
+
+        // 테이블 미존재인 경우에만 로컬 임시저장
         const localPost = {
             id: `local-${Date.now()}`,
             authorName: currentUser.name || '익명',
@@ -2487,7 +2513,7 @@ async function handleGallerySubmit(e) {
 
         document.getElementById('galleryForm').reset();
         document.getElementById('galleryImagePreview').style.display = 'none';
-        showToast(translations[currentLanguage].gallery_local_save_success);
+        showToast('⚠️ 서버 미연결 — 이 기기에만 임시 저장됩니다.');
         await loadGalleryPosts();
     } finally {
         setLoading(false);
