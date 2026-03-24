@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" href="images/logo-new.png?v=2026031002">
     <link rel="apple-touch-icon" href="images/logo-new.png?v=2026031002">
     <link rel="manifest" href="manifest.webmanifest?v=2026031002">
-    <link rel="stylesheet" href="css/style.css?v=2026030956">
+    <link rel="stylesheet" href="css/style.css?v=2026032414">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
 </head>
@@ -489,14 +489,20 @@
             <div class="gallery-form-container">
                 <h3 id="galleryFormTitle">사진 올리기</h3>
                 <form id="galleryForm">
-                    <div class="form-group">
-                        <label for="galleryImages" id="galleryUploadLabel">사진 업로드 (1장) <span class="required">*</span></label>
-                        <input type="file" id="galleryImages" class="input-field" accept="image/*" required>
-                        <small id="galleryLimitHelp" class="gallery-help">한 번에 1장만 업로드할 수 있습니다.</small>
-                        <div id="galleryImagePreview" class="gallery-upload-preview" style="display:none;">
-                            <img id="galleryPreviewImg" src="" alt="미리보기">
-                            <span id="galleryPreviewName" class="gallery-preview-filename"></span>
-                        </div>
+                    <div class="form-group gallery-upload-field">
+                        <p class="gallery-upload-heading">
+                            <span id="galleryUploadLabel">사진 업로드 (최대 4장)</span><span class="required">*</span>
+                        </p>
+                        <label class="gallery-dropzone" for="galleryImages">
+                            <input type="file" id="galleryImages" class="gallery-file-input" accept="image/*" multiple required>
+                            <span class="gallery-dropzone-face">
+                                <i class="fas fa-cloud-arrow-up gallery-dropzone-icon" aria-hidden="true"></i>
+                                <span class="gallery-dropzone-title" id="galleryDropzoneTitle">탭하거나 사진을 끌어다 놓기</span>
+                                <span class="gallery-dropzone-hint" id="galleryDropzoneHint">JPG, PNG, HEIC · 한 번에 최대 4장</span>
+                            </span>
+                        </label>
+                        <small id="galleryLimitHelp" class="gallery-help">사진은 최대 4장까지 한 게시물로 올릴 수 있습니다.</small>
+                        <div id="galleryImagePreview" class="gallery-preview-multi" style="display:none;" role="list" aria-live="polite"></div>
                     </div>
 
                     <div class="form-group">
@@ -780,6 +786,6 @@
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
-    <script src="js/main.js?v=2026032412"></script>
+    <script src="js/main.js?v=2026032414"></script>
 </body>
 </html>

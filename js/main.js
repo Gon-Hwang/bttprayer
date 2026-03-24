@@ -7,7 +7,9 @@ let currentMembers = [];
 let currentUser = null;
 let currentLanguage = 'ko'; // 기본 언어: 한글
 let deferredInstallPrompt = null;
-let selectedGalleryUploadFile = null;
+const GALLERY_MAX_UPLOAD = 4;
+let selectedGalleryUploadFiles = [];
+let galleryPreviewObjectUrls = [];
 const GALLERY_LOCAL_STORAGE_KEY = 'galleryPostsLocal';
 const GALLERY_LAYOUT_STORAGE_KEY = 'galleryLayoutColumns';
 const PWA_INSTALLED_STORAGE_KEY = 'pwaInstalled';
@@ -323,11 +325,15 @@ const translations = {
         // 사역 사진 갤러리
         gallery_title: '사진갤러리',
         gallery_form_title: '사진 올리기',
-        gallery_upload_label: '사진 업로드 (1장)',
+        gallery_upload_label: '사진 업로드 (최대 4장)',
+        gallery_dropzone_title: '탭하거나 사진을 끌어다 놓기',
+        gallery_dropzone_hint: 'JPG, PNG, HEIC · 한 번에 최대 4장',
+        gallery_max_toast: '최대 4장까지 선택할 수 있어요. 앞의 4장만 반영했습니다.',
+        gallery_remove_photo: '이 사진 빼기',
         gallery_description_label: '설명',
         gallery_description_placeholder: '사역 활동 사진 설명을 입력하세요...',
         gallery_submit: '갤러리 등록',
-        gallery_limit_note: '한 번에 1장만 업로드할 수 있습니다.',
+        gallery_limit_note: '사진은 최대 4장까지 한 게시물로 올릴 수 있습니다.',
         gallery_save_success: '사진이 저장되었습니다.',
         gallery_saved_local: '로컬 임시 저장',
         gallery_local_save_success: '사진이 저장되었습니다.',
@@ -500,11 +506,15 @@ const translations = {
         // Ministry gallery
         gallery_title: 'Ministry Photo Gallery',
         gallery_form_title: 'Upload Photos',
-        gallery_upload_label: 'Upload Photo (1)',
+        gallery_upload_label: 'Upload photos (up to 4)',
+        gallery_dropzone_title: 'Tap or drag & drop photos here',
+        gallery_dropzone_hint: 'JPG, PNG, HEIC · Up to 4 at once',
+        gallery_max_toast: 'You can select up to 4 photos. Only the first 4 were kept.',
+        gallery_remove_photo: 'Remove this photo',
         gallery_description_label: 'Description',
         gallery_description_placeholder: 'Write a short description of this ministry activity...',
         gallery_submit: 'Post Gallery',
-        gallery_limit_note: 'You can upload only one photo at a time.',
+        gallery_limit_note: 'You can attach up to 4 photos per post.',
         gallery_save_success: 'Photo has been saved.',
         gallery_saved_local: 'Saved locally',
         gallery_local_save_success: 'Photo has been saved.',
@@ -912,10 +922,12 @@ function applyLanguage(lang) {
 
     // 갤러리 폼 번역
     updateTextContent('galleryFormTitle', t.gallery_form_title);
-    updateTextContent('galleryUploadLabel', t.gallery_upload_label + ' ');
+    updateTextContent('galleryUploadLabel', t.gallery_upload_label);
+    updateTextContent('galleryDropzoneTitle', t.gallery_dropzone_title);
+    updateTextContent('galleryDropzoneHint', t.gallery_dropzone_hint);
     updateTextContent('galleryDescriptionLabel', t.gallery_description_label + ' ');
     updateTextContent('galleryLimitHelp', t.gallery_limit_note);
-    updateTextContent('gallerySubmitBtn', t.gallery_submit);
+    updateTextContent('gallerySubmitText', t.gallery_submit);
     const galleryDescriptionInput = document.getElementById('galleryDescription');
     if (galleryDescriptionInput) galleryDescriptionInput.placeholder = t.gallery_description_placeholder;
     
@@ -966,6 +978,9 @@ function applyLanguage(lang) {
         renderGalleryPosts();
         renderNotices();
         renderMembers();
+    }
+    if (selectedGalleryUploadFiles.length) {
+        renderGalleryMultiPreview(selectedGalleryUploadFiles);
     }
 }
 
@@ -1281,22 +1296,56 @@ function setupEventListeners() {
     document.getElementById('galleryList').addEventListener('click', handleGalleryListClick);
     document.getElementById('galleryLayoutToolbar').addEventListener('click', handleGalleryLayoutToolbarClick);
 
-    // 갤러리 파일 선택 미리보기 (HEIC는 JPEG로 변환 후 처리)
-    document.getElementById('galleryImages').addEventListener('change', async function () {
-        const file = this.files && this.files[0];
-        if (!file) {
-            clearGalleryUploadPreview();
-            return;
-        }
-        try {
-            selectedGalleryUploadFile = await normalizeGalleryUploadFile(file);
-            setGalleryUploadPreview(selectedGalleryUploadFile);
-        } catch (error) {
-            console.error('[GALLERY] 업로드 파일 변환 실패:', error);
-            clearGalleryUploadPreview();
-            alert(`사진 준비 실패:\n\n${getGalleryUploadFriendlyMessage(error, file)}\n\n다른 사진으로 다시 시도해주세요.`);
-        }
-    });
+    // 갤러리 파일 선택·드롭 (HEIC는 JPEG로 변환 후 처리, 최대 4장)
+    const galleryImagesInput = document.getElementById('galleryImages');
+    const galleryDropzone = document.querySelector('.gallery-dropzone');
+    if (galleryImagesInput) {
+        galleryImagesInput.addEventListener('change', async function () {
+            await applyGalleryImageFiles(this.files);
+        });
+    }
+    if (galleryDropzone) {
+        galleryDropzone.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        });
+        galleryDropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            galleryDropzone.classList.add('gallery-dropzone--active');
+        });
+        galleryDropzone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!galleryDropzone.contains(e.relatedTarget)) {
+                galleryDropzone.classList.remove('gallery-dropzone--active');
+            }
+        });
+        galleryDropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            galleryDropzone.classList.remove('gallery-dropzone--active');
+            if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+                applyGalleryImageFiles(e.dataTransfer.files);
+            }
+        });
+    }
+    const galleryPreviewEl = document.getElementById('galleryImagePreview');
+    if (galleryPreviewEl) {
+        galleryPreviewEl.addEventListener('click', (e) => {
+            const btn = e.target.closest('.gallery-preview-remove');
+            if (!btn) return;
+            const idx = Number(btn.dataset.galleryPreviewIndex);
+            if (!Number.isInteger(idx) || idx < 0 || idx >= selectedGalleryUploadFiles.length) return;
+            selectedGalleryUploadFiles.splice(idx, 1);
+            syncGalleryInputFilesFromSelection();
+            if (selectedGalleryUploadFiles.length === 0) {
+                clearGalleryUploadPreview();
+            } else {
+                renderGalleryMultiPreview(selectedGalleryUploadFiles);
+            }
+        });
+    }
 
     // 확인 모달 버튼
     const confirmOkBtn = document.getElementById('confirmModalOkBtn');
@@ -2301,14 +2350,94 @@ function addLocalGalleryPost(post) {
     saveLocalGalleryPosts(localPosts);
 }
 
+function revokeGalleryPreviewUrls() {
+    galleryPreviewObjectUrls.forEach((u) => {
+        try {
+            URL.revokeObjectURL(u);
+        } catch (_) {
+            /* noop */
+        }
+    });
+    galleryPreviewObjectUrls = [];
+}
+
+function syncGalleryInputFilesFromSelection() {
+    const input = document.getElementById('galleryImages');
+    if (!input || typeof DataTransfer === 'undefined') return;
+    try {
+        const dt = new DataTransfer();
+        selectedGalleryUploadFiles.forEach((f) => dt.items.add(f));
+        input.files = dt.files;
+    } catch (err) {
+        console.warn('[GALLERY] 파일 입력 동기화 실패:', err);
+    }
+}
+
+function renderGalleryMultiPreview(files) {
+    const container = document.getElementById('galleryImagePreview');
+    if (!container) return;
+    revokeGalleryPreviewUrls();
+    const t = translations[currentLanguage];
+    if (!files || files.length === 0) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+    container.innerHTML = files.map((file, index) => {
+        const url = URL.createObjectURL(file);
+        galleryPreviewObjectUrls.push(url);
+        const label = escapeHtml(t.gallery_remove_photo || '제거');
+        const rawName = file.name || '';
+        const shortName = rawName.length > 52 ? `${rawName.slice(0, 52)}…` : rawName;
+        const name = escapeHtml(shortName);
+        return `
+            <div class="gallery-preview-tile" role="listitem">
+                <div class="gallery-preview-tile-img-wrap">
+                    <img src="${url}" alt="" loading="lazy">
+                    <button type="button" class="gallery-preview-remove" data-gallery-preview-index="${index}" title="${label}" aria-label="${label}">
+                        <i class="fas fa-xmark" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <span class="gallery-preview-tile-name">${name}</span>
+            </div>`;
+    }).join('');
+    container.style.display = 'grid';
+}
+
+async function applyGalleryImageFiles(fileList) {
+    const raw = Array.from(fileList || []).filter((f) => f && f.type && f.type.startsWith('image/'));
+    if (raw.length === 0) {
+        clearGalleryUploadPreview();
+        return;
+    }
+    const t = translations[currentLanguage];
+    const limited = raw.slice(0, GALLERY_MAX_UPLOAD);
+    if (raw.length > GALLERY_MAX_UPLOAD) {
+        showToast(t.gallery_max_toast);
+    }
+    try {
+        const normalized = await Promise.all(limited.map((f) => normalizeGalleryUploadFile(f)));
+        selectedGalleryUploadFiles = normalized.filter(Boolean);
+        syncGalleryInputFilesFromSelection();
+        renderGalleryMultiPreview(selectedGalleryUploadFiles);
+    } catch (error) {
+        const failedFile = limited[0] || raw[0];
+        console.error('[GALLERY] 업로드 파일 변환 실패:', error);
+        clearGalleryUploadPreview();
+        alert(`사진 준비 실패:\n\n${getGalleryUploadFriendlyMessage(error, failedFile)}\n\n다른 사진으로 다시 시도해주세요.`);
+    }
+}
+
 function clearGalleryUploadPreview() {
-    const preview = document.getElementById('galleryImagePreview');
-    const previewImg = document.getElementById('galleryPreviewImg');
-    const previewName = document.getElementById('galleryPreviewName');
-    if (preview) preview.style.display = 'none';
-    if (previewImg) previewImg.src = '';
-    if (previewName) previewName.textContent = '';
-    selectedGalleryUploadFile = null;
+    const input = document.getElementById('galleryImages');
+    const container = document.getElementById('galleryImagePreview');
+    revokeGalleryPreviewUrls();
+    selectedGalleryUploadFiles = [];
+    if (input) input.value = '';
+    if (container) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+    }
 }
 
 function isImageReadErrorMessage(message) {
@@ -2362,29 +2491,6 @@ async function normalizeGalleryUploadFile(file) {
         return convertHeicToJpegFile(file);
     }
     return file;
-}
-
-function setGalleryUploadPreview(file) {
-    const preview = document.getElementById('galleryImagePreview');
-    const previewImg = document.getElementById('galleryPreviewImg');
-    const previewName = document.getElementById('galleryPreviewName');
-    if (!preview || !previewImg || !previewName) return;
-
-    if (!file) {
-        clearGalleryUploadPreview();
-        return;
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-    previewImg.onload = () => URL.revokeObjectURL(objectUrl);
-    previewImg.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        // 일부 모바일 포맷(예: HEIC)은 미리보기가 안 될 수 있다.
-        previewName.textContent = `${file.name || ''} (미리보기 불가 형식)`;
-    };
-    previewImg.src = objectUrl;
-    previewName.textContent = file.name || '';
-    preview.style.display = 'block';
 }
 
 function canDeleteGalleryPost(post) {
@@ -2636,15 +2742,17 @@ async function handleGallerySubmit(e) {
     const descriptionInput = document.getElementById('galleryDescription');
     const imagesInput = document.getElementById('galleryImages');
     const description = descriptionInput.value.trim();
-    const files = selectedGalleryUploadFile ? [selectedGalleryUploadFile] : Array.from(imagesInput.files || []);
+    const files = selectedGalleryUploadFiles.length
+        ? [...selectedGalleryUploadFiles]
+        : Array.from(imagesInput.files || []).filter((f) => f.type && f.type.startsWith('image/'));
 
     if (files.length === 0) {
         alert('최소 1장의 사진을 업로드해주세요.');
         return;
     }
 
-    if (files.length > 1) {
-        alert('사진은 한 번에 1장만 업로드할 수 있습니다.');
+    if (files.length > GALLERY_MAX_UPLOAD) {
+        alert(`사진은 최대 ${GALLERY_MAX_UPLOAD}장까지 업로드할 수 있습니다.`);
         return;
     }
 
@@ -2661,7 +2769,8 @@ async function handleGallerySubmit(e) {
     let imageDataUrls = [];
     let optimisticId = '';
     try {
-        imageDataUrls = await Promise.all(files.map((file) => compressImageFileToDataUrl(file)));
+        const compressW = files.length >= 3 ? 840 : 960;
+        imageDataUrls = await Promise.all(files.map((file) => compressImageFileToDataUrl(file, compressW)));
 
         optimisticId = `optimistic-${Date.now()}`;
         const optimisticPost = {
