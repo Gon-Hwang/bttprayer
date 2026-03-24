@@ -236,7 +236,7 @@ const translations = {
         nav_login: '로그인',
         nav_prayers: '기도제목',
         nav_testimonies: '간증',
-        nav_gallery: '사진겔러리',
+        nav_gallery: '사진갤러리',
         nav_notices: '공지사항',
         nav_admin: '관리자',
         
@@ -321,7 +321,7 @@ const translations = {
         testimonies_empty: '아직 등록된 간증이 없습니다. 하나님의 응답하신 간증을 나눠주세요!',
 
         // 사역 사진 갤러리
-        gallery_title: '사진겔러리',
+        gallery_title: '사진갤러리',
         gallery_form_title: '사진 올리기',
         gallery_upload_label: '사진 업로드 (1장)',
         gallery_description_label: '설명',
