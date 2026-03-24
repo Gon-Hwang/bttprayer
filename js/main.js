@@ -1927,8 +1927,6 @@ async function handlePrayerSubmit(e) {
             },
             body: JSON.stringify({
                 name: isAnonymous ? '익명' : (name || '익명'),
-                authorName: currentUser ? currentUser.name : (name || '익명'),
-                authorEmail: currentUser ? (currentUser.email || '') : '',
                 title: title,
                 content: content,
                 isAnonymous: isAnonymous,
@@ -2138,8 +2136,6 @@ async function handleTestimonySubmit(e) {
             },
             body: JSON.stringify({
                 name: isAnonymous ? '익명' : (name || '익명'),
-                authorName: currentUser ? currentUser.name : (name || '익명'),
-                authorEmail: currentUser ? (currentUser.email || '') : '',
                 title: title,
                 content: content,
                 isAnonymous: isAnonymous,
@@ -2158,6 +2154,8 @@ async function handleTestimonySubmit(e) {
             // 성공 메시지
             alert('간증이 등록되었습니다. 할렐루야! 🎉');
         } else {
+            const errBody = await response.text().catch(() => '');
+            console.error('[간증 등록] 서버 응답:', response.status, errBody);
             throw new Error('등록 실패');
         }
     } catch (error) {
@@ -3509,7 +3507,10 @@ async function processImportData(importData) {
             '_attachments',
             '_ts',
             'deleted',
-            'deleted_at'
+            'deleted_at',
+            // D1 스키마에 없는 클라이언트 전용 필드 (POST 시 SQLITE_ERROR 방지)
+            'authorName',
+            'authorEmail'
         ];
         
         systemFields.forEach(field => delete cleaned[field]);
