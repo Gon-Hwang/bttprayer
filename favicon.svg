@@ -1,25 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- 기도하는 손 아이콘 - GREEN -->
-  <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#16a34a;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#15803d;stop-opacity:1" />
-    </linearGradient>
-  </defs>
-  
-  <!-- 배경 원 -->
-  <circle cx="50" cy="50" r="48" fill="url(#grad)"/>
-  
-  <!-- 기도하는 손 -->
-  <g fill="white" transform="translate(50, 50)">
-    <!-- 왼손 -->
-    <path d="M-15,-10 Q-20,-15 -18,-20 Q-16,-25 -12,-23 L-8,-10 Z"/>
-    <!-- 오른손 -->
-    <path d="M15,-10 Q20,-15 18,-20 Q16,-25 12,-23 L8,-10 Z"/>
-    <!-- 손바닥 -->
-    <ellipse cx="0" cy="0" rx="18" ry="12" opacity="0.9"/>
-    <!-- 십자가 -->
-    <rect x="-1.5" y="-18" width="3" height="12" opacity="0.8"/>
-    <rect x="-5" y="-13" width="10" height="3" opacity="0.8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <g fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
+    <!-- tent outer -->
+    <path d="M34 402 C44 336 54 276 66 212 C166 192 236 124 256 56 C276 124 346 192 446 212 C458 276 468 336 478 402 Z" stroke-width="14"/>
+    <!-- tent center lines -->
+    <path d="M74 392 C150 320 210 240 256 74 C302 240 362 320 438 392" stroke-width="14"/>
+    <path d="M156 392 C198 338 232 276 256 126 C280 276 314 338 356 392" stroke-width="14"/>
+  </g>
+
+  <!-- praying hands -->
+  <g fill="#000">
+    <path d="M226 402 C214 382 212 360 218 338 C221 328 230 320 238 324 C246 328 248 340 246 352 C243 372 238 390 236 402 Z"/>
+    <path d="M286 402 C298 382 300 360 294 338 C291 328 282 320 274 324 C266 328 264 340 266 352 C269 372 274 390 276 402 Z"/>
+    <path d="M252 402 C248 380 248 356 252 334 C254 324 258 318 264 318 C270 318 274 324 276 334 C280 356 280 380 276 402 Z"/>
+    <path d="M236 306 C244 286 250 272 256 272 C262 272 268 286 276 306 C266 298 246 298 236 306 Z"/>
   </g>
 </svg>

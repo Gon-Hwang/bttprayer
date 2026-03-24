@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" href="images/logo-new.png?v=2026031002">
     <link rel="apple-touch-icon" href="images/logo-new.png?v=2026031002">
     <link rel="manifest" href="manifest.webmanifest?v=2026031002">
-    <link rel="stylesheet" href="css/style.css?v=2026030949">
+    <link rel="stylesheet" href="css/style.css?v=2026030956">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
 </head>
@@ -491,7 +491,7 @@
                 <form id="galleryForm">
                     <div class="form-group">
                         <label for="galleryImages" id="galleryUploadLabel">사진 업로드 (1장) <span class="required">*</span></label>
-                        <input type="file" id="galleryImages" class="input-field" accept="image/*" capture="environment" required>
+                        <input type="file" id="galleryImages" class="input-field" accept="image/*" required>
                         <small id="galleryLimitHelp" class="gallery-help">한 번에 1장만 업로드할 수 있습니다.</small>
                         <div id="galleryImagePreview" class="gallery-upload-preview" style="display:none;">
                             <img id="galleryPreviewImg" src="" alt="미리보기">
@@ -500,8 +500,8 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="galleryDescription" id="galleryDescriptionLabel">설명 <span class="required">*</span></label>
-                        <textarea id="galleryDescription" class="textarea-field" placeholder="사역 활동 사진 설명을 입력하세요..." required></textarea>
+                        <label for="galleryDescription" id="galleryDescriptionLabel">설명</label>
+                        <textarea id="galleryDescription" class="textarea-field" placeholder="사역 활동 사진 설명을 입력하세요..."></textarea>
                     </div>
 
                     <div class="form-actions-center">
@@ -513,7 +513,26 @@
                 </form>
             </div>
 
-            <div class="gallery-list" id="galleryList">
+            <div class="gallery-layout-toolbar" id="galleryLayoutToolbar" aria-label="갤러리 한 줄 전시 개수 선택">
+                <button type="button" class="gallery-layout-btn active" data-cols="1" title="한 줄에 사진 1장">
+                    <span class="gallery-layout-bars" aria-hidden="true"><span></span></span>
+                    <span class="gallery-layout-count">1</span>
+                </button>
+                <button type="button" class="gallery-layout-btn" data-cols="2" title="한 줄에 사진 2장">
+                    <span class="gallery-layout-bars" aria-hidden="true"><span></span><span></span></span>
+                    <span class="gallery-layout-count">2</span>
+                </button>
+                <button type="button" class="gallery-layout-btn" data-cols="3" title="한 줄에 사진 3장">
+                    <span class="gallery-layout-bars" aria-hidden="true"><span></span><span></span><span></span></span>
+                    <span class="gallery-layout-count">3</span>
+                </button>
+                <button type="button" class="gallery-layout-btn" data-cols="4" title="한 줄에 사진 4장">
+                    <span class="gallery-layout-bars" aria-hidden="true"><span></span><span></span><span></span><span></span></span>
+                    <span class="gallery-layout-count">4</span>
+                </button>
+            </div>
+
+            <div class="gallery-list" id="galleryList" data-cols="1">
                 <div class="loading">사진을 불러오는 중...</div>
             </div>
         </div>
@@ -719,10 +738,14 @@
     </section>
 
     <!-- 확인 모달 (iOS PWA confirm() 대체) -->
-    <div class="modal" id="confirmModal" style="display:none;">
-        <div class="modal-content" style="max-width:420px;">
-            <p id="confirmModalMessage" style="font-size:1.6rem;margin-bottom:2rem;line-height:1.6;white-space:pre-line;"></p>
-            <div class="modal-actions">
+    <div class="modal confirm-modal" id="confirmModal" style="display:none;">
+        <div class="modal-content confirm-modal-content">
+            <div class="confirm-modal-icon" id="confirmModalIcon" aria-hidden="true">
+                <i class="fas fa-circle-question"></i>
+            </div>
+            <h3 id="confirmModalTitle" class="confirm-modal-title">확인</h3>
+            <p id="confirmModalMessage" class="confirm-modal-message"></p>
+            <div class="modal-actions confirm-modal-actions">
                 <button type="button" class="cancel-button" id="confirmModalCancelBtn">취소</button>
                 <button type="button" class="confirm-modal-ok-btn" id="confirmModalOkBtn">확인</button>
             </div>
@@ -756,6 +779,7 @@
         })();
     </script>
 
-    <script src="js/main.js?v=2026031305"></script>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <script src="js/main.js?v=2026032410"></script>
 </body>
 </html>

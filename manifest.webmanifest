@@ -1,0 +1,36 @@
+{
+  "name": "보좌 앞에서",
+  "short_name": "보좌 앞에서",
+  "description": "보좌 앞에서 기도 모임 웹앱",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffd4c4",
+  "theme_color": "#7c6fd6",
+  "icons": [
+    {
+      "src": "app-icon-192.png?v=2026031001",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "app-icon-512.png?v=2026031001",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "app-icon-512.png?v=2026031001",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "favicon.svg?v=2026031001",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

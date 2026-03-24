@@ -7,20 +7,37 @@ let currentMembers = [];
 let currentUser = null;
 let currentLanguage = 'ko'; // 기본 언어: 한글
 let deferredInstallPrompt = null;
+let selectedGalleryUploadFile = null;
 const GALLERY_LOCAL_STORAGE_KEY = 'galleryPostsLocal';
+const GALLERY_LAYOUT_STORAGE_KEY = 'galleryLayoutColumns';
 const PWA_INSTALLED_STORAGE_KEY = 'pwaInstalled';
 let installModalResolver = null;
 let isGalleryRemoteAvailable = true;
 let confirmModalResolver = null;
 const testimonyLikeInFlight = new Set();
 const prayerClickInFlight = new Set();
+let galleryLayoutColumns = 1;
 
 // iOS PWA standalone 모드에서 confirm()이 차단되는 문제를 우회하는 커스텀 confirm
 function showConfirm(message) {
     const modal = document.getElementById('confirmModal');
     if (!modal) return Promise.resolve(window.confirm(message));
     return new Promise((resolve) => {
-        document.getElementById('confirmModalMessage').textContent = message;
+        const isDestructive = /삭제|remove|delete/i.test(message || '');
+        const titleEl = document.getElementById('confirmModalTitle');
+        const messageEl = document.getElementById('confirmModalMessage');
+        const iconEl = document.getElementById('confirmModalIcon');
+        const okBtn = document.getElementById('confirmModalOkBtn');
+        if (titleEl) titleEl.textContent = isDestructive ? '삭제 확인' : '확인';
+        if (messageEl) messageEl.textContent = message;
+        if (iconEl) {
+            iconEl.classList.toggle('destructive', isDestructive);
+            iconEl.innerHTML = `<i class="fas ${isDestructive ? 'fa-triangle-exclamation' : 'fa-circle-question'}"></i>`;
+        }
+        if (okBtn) {
+            okBtn.classList.toggle('destructive', isDestructive);
+            okBtn.textContent = isDestructive ? '삭제' : '확인';
+        }
         modal.style.display = 'flex';
         if (confirmModalResolver) confirmModalResolver(false);
         confirmModalResolver = resolve;
@@ -58,9 +75,12 @@ window.fetch = (input, init) => {
             /^tables\/gallery_posts(?:\/[^/?#]+)?$/.test(input) && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE');
         const isNoticeEndpoint =
             /^tables\/notices(?:\/[^/?#]+)?$/.test(input) && (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE');
+        const isPrayerTestimonyPostOrDelete =
+            (method === 'POST' && /^(tables\/prayers|tables\/testimonies)$/.test(input)) ||
+            (method === 'DELETE' && /^tables\/(prayers|testimonies)\/[^/?#]+$/.test(input));
 
         // 로컬/LAN에서만 쓰기 요청 기본 차단 (실수로 운영 데이터 변경 방지)
-        if (IS_LOCAL_OR_LAN && API_BASE_URL && method !== 'GET' && !isPrayerToggleEndpoint && !isTestimonyLikeEndpoint && !isGalleryEndpoint && !isNoticeEndpoint) {
+        if (IS_LOCAL_OR_LAN && API_BASE_URL && method !== 'GET' && !isPrayerToggleEndpoint && !isTestimonyLikeEndpoint && !isGalleryEndpoint && !isNoticeEndpoint && !isPrayerTestimonyPostOrDelete) {
             console.warn('[LOCAL SAFETY] 로컬 환경에서 쓰기 요청이 차단되었습니다:', method, input);
             return Promise.reject(new Error('로컬 안전모드: 운영 데이터 쓰기 요청이 차단되었습니다.'));
         }
@@ -568,6 +588,7 @@ document.addEventListener('DOMContentLoaded', function() {
     checkLoginStatus();
     initializeApp();
     setupEventListeners();
+    initializeGalleryLayoutControls();
     setupScrollButton();
     setupMobileMenu();
 });
@@ -721,9 +742,14 @@ function canDeleteAuthoredPost(post) {
     const currentEmail = normalizeEmail(currentUser.email);
     const postEmailCandidates = [
         post.authorEmail,
+        post.author_email,
         post.email,
+        post.user_email,
         post.createdByEmail,
-        post.userEmail
+        post.created_by_email,
+        post.userEmail,
+        post.writerEmail,
+        post.memberEmail
     ].map(normalizeEmail).filter(Boolean);
     if (currentEmail && postEmailCandidates.includes(currentEmail)) return true;
 
@@ -733,9 +759,14 @@ function canDeleteAuthoredPost(post) {
     const currentName = normalizeName(currentUser.name);
     const postNameCandidates = [
         post.authorName,
+        post.author_name,
         post.name,
+        post.user_name,
         post.createdByName,
-        post.userName
+        post.created_by_name,
+        post.userName,
+        post.writerName,
+        post.memberName
     ].map(normalizeName).filter(Boolean);
     return !!currentName && postNameCandidates.some((name) => !isAnonymousName(name) && name === currentName);
 }
@@ -1248,23 +1279,22 @@ function setupEventListeners() {
     // 사역 사진 갤러리 폼 제출
     document.getElementById('galleryForm').addEventListener('submit', handleGallerySubmit);
     document.getElementById('galleryList').addEventListener('click', handleGalleryListClick);
+    document.getElementById('galleryLayoutToolbar').addEventListener('click', handleGalleryLayoutToolbarClick);
 
-    // 갤러리 파일 선택 미리보기
-    document.getElementById('galleryImages').addEventListener('change', function () {
+    // 갤러리 파일 선택 미리보기 (HEIC는 JPEG로 변환 후 처리)
+    document.getElementById('galleryImages').addEventListener('change', async function () {
         const file = this.files && this.files[0];
-        const preview = document.getElementById('galleryImagePreview');
-        const previewImg = document.getElementById('galleryPreviewImg');
-        const previewName = document.getElementById('galleryPreviewName');
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                previewImg.src = e.target.result;
-                previewName.textContent = file.name;
-                preview.style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-        } else {
-            preview.style.display = 'none';
+        if (!file) {
+            clearGalleryUploadPreview();
+            return;
+        }
+        try {
+            selectedGalleryUploadFile = await normalizeGalleryUploadFile(file);
+            setGalleryUploadPreview(selectedGalleryUploadFile);
+        } catch (error) {
+            console.error('[GALLERY] 업로드 파일 변환 실패:', error);
+            clearGalleryUploadPreview();
+            alert(`사진 준비 실패:\n\n${getGalleryUploadFriendlyMessage(error, file)}\n\n다른 사진으로 다시 시도해주세요.`);
         }
     });
 
@@ -1302,6 +1332,45 @@ function setupEventListeners() {
     document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', handleNavClick);
     });
+}
+
+function normalizeGalleryLayoutColumns(value) {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed)) return 1;
+    return Math.min(4, Math.max(1, parsed));
+}
+
+function updateGalleryLayoutButtons() {
+    document.querySelectorAll('.gallery-layout-btn').forEach((btn) => {
+        const cols = normalizeGalleryLayoutColumns(btn.dataset.cols);
+        const isActive = cols === galleryLayoutColumns;
+        btn.classList.toggle('active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+    });
+}
+
+function applyGalleryLayout(columns, options = {}) {
+    const { save = true } = options;
+    galleryLayoutColumns = normalizeGalleryLayoutColumns(columns);
+    const galleryList = document.getElementById('galleryList');
+    if (galleryList) {
+        galleryList.dataset.cols = String(galleryLayoutColumns);
+    }
+    updateGalleryLayoutButtons();
+    if (save) {
+        localStorage.setItem(GALLERY_LAYOUT_STORAGE_KEY, String(galleryLayoutColumns));
+    }
+}
+
+function initializeGalleryLayoutControls() {
+    const savedCols = localStorage.getItem(GALLERY_LAYOUT_STORAGE_KEY);
+    applyGalleryLayout(savedCols || 1, { save: false });
+}
+
+function handleGalleryLayoutToolbarClick(e) {
+    const btn = e.target.closest('.gallery-layout-btn');
+    if (!btn) return;
+    applyGalleryLayout(btn.dataset.cols);
 }
 
 // 로그인 처리
@@ -2234,15 +2303,96 @@ function addLocalGalleryPost(post) {
     saveLocalGalleryPosts(localPosts);
 }
 
+function clearGalleryUploadPreview() {
+    const preview = document.getElementById('galleryImagePreview');
+    const previewImg = document.getElementById('galleryPreviewImg');
+    const previewName = document.getElementById('galleryPreviewName');
+    if (preview) preview.style.display = 'none';
+    if (previewImg) previewImg.src = '';
+    if (previewName) previewName.textContent = '';
+    selectedGalleryUploadFile = null;
+}
+
+function isImageReadErrorMessage(message) {
+    return /이미지 파일을 읽지 못했습니다|이미지 원본을 읽지 못했습니다|NotReadableError|NotFoundError|AbortError/i.test(String(message || ''));
+}
+
+function getGalleryUploadFriendlyMessage(error, file) {
+    const message = String(error && error.message ? error.message : error || '');
+    const fileName = (file && file.name) ? `"${file.name}"` : '선택한 사진';
+
+    if (message.includes('HEIC 변환 모듈')) {
+        return `${fileName} 변환 모듈을 불러오지 못했습니다.\n잠시 후 다시 시도하거나 앱을 완전히 종료 후 재실행해 주세요.`;
+    }
+    if (message.includes('HEIC 변환에 실패')) {
+        return `${fileName}의 HEIC 변환에 실패했습니다.\n사진 앱에서 JPG로 내보낸 뒤 다시 업로드해 주세요.`;
+    }
+    if (isImageReadErrorMessage(message)) {
+        return `${fileName} 파일을 읽지 못했습니다.\n아래를 확인해 주세요:\n- 사진 원본을 기기에 먼저 다운로드\n- 파일 앱/클라우드에서 직접 선택 시 잠시 후 재시도\n- 다른 사진 1장으로 먼저 테스트`;
+    }
+    if (message.includes('이미지 처리 중 오류') || message.includes('이미지 캔버스 처리 실패')) {
+        return `${fileName} 처리 중 오류가 발생했습니다.\n이미지 크기가 너무 크거나 브라우저 메모리가 부족할 수 있습니다.`;
+    }
+    return message || '사진 처리 중 알 수 없는 오류가 발생했습니다.';
+}
+
+function isHeicFile(file) {
+    if (!file) return false;
+    const type = (file.type || '').toLowerCase();
+    const name = (file.name || '').toLowerCase();
+    return type.includes('heic') || type.includes('heif') || name.endsWith('.heic') || name.endsWith('.heif');
+}
+
+async function convertHeicToJpegFile(file) {
+    if (!window.heic2any) {
+        throw new Error('HEIC 변환 모듈을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+    }
+    const converted = await window.heic2any({
+        blob: file,
+        toType: 'image/jpeg',
+        quality: 0.85
+    });
+    const convertedBlob = Array.isArray(converted) ? converted[0] : converted;
+    if (!convertedBlob) throw new Error('HEIC 변환에 실패했습니다.');
+    const nextName = (file.name || 'upload').replace(/\.(heic|heif)$/i, '.jpg');
+    return new File([convertedBlob], nextName, { type: 'image/jpeg' });
+}
+
+async function normalizeGalleryUploadFile(file) {
+    if (!file) return null;
+    if (isHeicFile(file)) {
+        return convertHeicToJpegFile(file);
+    }
+    return file;
+}
+
+function setGalleryUploadPreview(file) {
+    const preview = document.getElementById('galleryImagePreview');
+    const previewImg = document.getElementById('galleryPreviewImg');
+    const previewName = document.getElementById('galleryPreviewName');
+    if (!preview || !previewImg || !previewName) return;
+
+    if (!file) {
+        clearGalleryUploadPreview();
+        return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    previewImg.onload = () => URL.revokeObjectURL(objectUrl);
+    previewImg.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        // 일부 모바일 포맷(예: HEIC)은 미리보기가 안 될 수 있다.
+        previewName.textContent = `${file.name || ''} (미리보기 불가 형식)`;
+    };
+    previewImg.src = objectUrl;
+    previewName.textContent = file.name || '';
+    preview.style.display = 'block';
+}
+
 function canDeleteGalleryPost(post) {
     if (!currentUser || !post) return false;
-    if (isUserAdmin(currentUser)) return true;
-
-    const currentEmail = (currentUser.email || '').toLowerCase().trim();
-    const postEmail = (post.authorEmail || '').toLowerCase().trim();
-    if (currentEmail && postEmail && currentEmail === postEmail) return true;
-
-    return (currentUser.name || '').trim() && (currentUser.name || '').trim() === (post.authorName || '').trim();
+    if (post.localOnly) return true;
+    return canDeleteAuthoredPost(post);
 }
 
 function parseGalleryImages(rawImages) {
@@ -2382,51 +2532,99 @@ function closeLightbox() {
     document.body.style.overflow = '';
 }
 
+function fileToDataUrlOnce(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => {
+            const reason = (reader.error && reader.error.name) ? reader.error.name : 'UnknownError';
+            reject(new Error(`이미지 파일을 읽지 못했습니다 (${reason})`));
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+async function fileToDataUrl(file) {
+    try {
+        return await fileToDataUrlOnce(file);
+    } catch (firstError) {
+        // 모바일 환경에서 간헐적으로 FileReader가 실패하는 경우가 있어 1회 우회 재시도
+        try {
+            await new Promise((resolve) => setTimeout(resolve, 120));
+            if (file && typeof file.arrayBuffer === 'function') {
+                const buffer = await file.arrayBuffer();
+                const cloned = new File([buffer], file.name || 'upload', {
+                    type: file.type || 'application/octet-stream'
+                });
+                return await fileToDataUrlOnce(cloned);
+            }
+        } catch (secondError) {
+            console.warn('[GALLERY] 파일 읽기 재시도 실패:', secondError);
+        }
+        throw new Error(getGalleryUploadFriendlyMessage(firstError, file));
+    }
+}
+
 // 목표 크기(바이트) 이하가 될 때까지 품질을 낮춰가며 압축
 async function compressImageFileToDataUrl(file, maxWidth = 960, quality = 0.75) {
     const TARGET_BYTES = 350 * 1024; // 350KB (base64 포함 ~467KB)
 
-    const dataUrl = await new Promise((resolve, reject) => {
-        if (!file || !file.type.startsWith('image/')) {
-            reject(new Error('이미지 파일만 업로드할 수 있습니다.'));
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = () => {
-            const img = new Image();
-            img.onload = () => {
-                const ratio = img.width > maxWidth ? (maxWidth / img.width) : 1;
-                const canvas = document.createElement('canvas');
-                canvas.width = Math.round(img.width * ratio);
-                canvas.height = Math.round(img.height * ratio);
-                canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-                resolve({ canvas, img });
+    try {
+        const dataUrl = await new Promise((resolve, reject) => {
+            if (!file || !file.type.startsWith('image/')) {
+                reject(new Error('이미지 파일만 업로드할 수 있습니다.'));
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = () => {
+                const img = new Image();
+                img.onload = () => {
+                    const ratio = img.width > maxWidth ? (maxWidth / img.width) : 1;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(1, Math.round(img.width * ratio));
+                    canvas.height = Math.max(1, Math.round(img.height * ratio));
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        reject(new Error('이미지 캔버스 처리 실패'));
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    resolve({ canvas, img });
+                };
+                img.onerror = () => reject(new Error('이미지 처리 중 오류가 발생했습니다.'));
+                img.src = reader.result;
             };
-            img.onerror = () => reject(new Error('이미지 처리 중 오류가 발생했습니다.'));
-            img.src = reader.result;
-        };
-        reader.onerror = () => reject(new Error('이미지 파일을 읽지 못했습니다.'));
-        reader.readAsDataURL(file);
-    });
+            reader.onerror = () => {
+                const reason = (reader.error && reader.error.name) ? reader.error.name : 'UnknownError';
+                reject(new Error(`이미지 파일을 읽지 못했습니다 (${reason})`));
+            };
+            reader.readAsDataURL(file);
+        });
 
-    const { canvas } = dataUrl;
+        const { canvas } = dataUrl;
 
-    // 첫 시도
-    let result = canvas.toDataURL('image/jpeg', quality);
-    if (result.length <= TARGET_BYTES * 1.37) return result; // base64는 원본의 ~1.37배
+        // 첫 시도
+        let result = canvas.toDataURL('image/jpeg', quality);
+        if (result.length <= TARGET_BYTES * 1.37) return result; // base64는 원본의 ~1.37배
 
-    // 크기 초과 시 품질 단계적 축소
-    for (const q of [0.65, 0.55, 0.45, 0.35]) {
-        result = canvas.toDataURL('image/jpeg', q);
-        if (result.length <= TARGET_BYTES * 1.37) return result;
+        // 크기 초과 시 품질 단계적 축소
+        for (const q of [0.65, 0.55, 0.45, 0.35]) {
+            result = canvas.toDataURL('image/jpeg', q);
+            if (result.length <= TARGET_BYTES * 1.37) return result;
+        }
+
+        // 그래도 크면 해상도도 줄임
+        const smallCanvas = document.createElement('canvas');
+        smallCanvas.width = Math.max(1, Math.round(canvas.width * 0.65));
+        smallCanvas.height = Math.max(1, Math.round(canvas.height * 0.65));
+        const smallCtx = smallCanvas.getContext('2d');
+        if (!smallCtx) return result;
+        smallCtx.drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
+        return smallCanvas.toDataURL('image/jpeg', 0.55);
+    } catch (error) {
+        console.warn('[GALLERY] 압축 실패, 원본 DataURL로 대체:', error);
+        return fileToDataUrl(file);
     }
-
-    // 그래도 크면 해상도도 줄임
-    const smallCanvas = document.createElement('canvas');
-    smallCanvas.width = Math.round(canvas.width * 0.65);
-    smallCanvas.height = Math.round(canvas.height * 0.65);
-    smallCanvas.getContext('2d').drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
-    return smallCanvas.toDataURL('image/jpeg', 0.55);
 }
 
 async function handleGallerySubmit(e) {
@@ -2440,12 +2638,7 @@ async function handleGallerySubmit(e) {
     const descriptionInput = document.getElementById('galleryDescription');
     const imagesInput = document.getElementById('galleryImages');
     const description = descriptionInput.value.trim();
-    const files = Array.from(imagesInput.files || []);
-
-    if (!description) {
-        alert('설명을 입력해주세요.');
-        return;
-    }
+    const files = selectedGalleryUploadFile ? [selectedGalleryUploadFile] : Array.from(imagesInput.files || []);
 
     if (files.length === 0) {
         alert('최소 1장의 사진을 업로드해주세요.');
@@ -2468,8 +2661,22 @@ async function handleGallerySubmit(e) {
 
     setLoading(true);
     let imageDataUrls = [];
+    let optimisticId = '';
     try {
         imageDataUrls = await Promise.all(files.map((file) => compressImageFileToDataUrl(file)));
+
+        optimisticId = `optimistic-${Date.now()}`;
+        const optimisticPost = {
+            id: optimisticId,
+            authorName: currentUser.name || '익명',
+            authorEmail: currentUser.email || '',
+            description: description,
+            images: imageDataUrls,
+            date: new Date().toISOString(),
+            optimistic: true
+        };
+        currentGalleryPosts = [optimisticPost, ...currentGalleryPosts];
+        renderGalleryPosts();
 
         if (!isGalleryRemoteAvailable) {
             throw new Error('gallery_posts table unavailable');
@@ -2495,26 +2702,53 @@ async function handleGallerySubmit(e) {
             throw new Error(`갤러리 등록 실패 (${response.status})`);
         }
 
-        // 낙관적 즉시 반영: 서버 응답 전에 화면에 먼저 추가
-        const newPost = {
-            id: `optimistic-${Date.now()}`,
-            authorName: currentUser.name || '익명',
-            authorEmail: currentUser.email || '',
-            description: description,
-            images: imageDataUrls,
-            date: new Date().toISOString()
-        };
-        currentGalleryPosts = [newPost, ...currentGalleryPosts];
-        renderGalleryPosts();
+        let serverPost = null;
+        try {
+            const json = await response.json();
+            serverPost = (json && (json.data || json)) || null;
+        } catch (_) {
+            serverPost = null;
+        }
+
+        if (serverPost && serverPost.id) {
+            currentGalleryPosts = currentGalleryPosts.map((post) => (
+                post.id === optimisticId
+                    ? {
+                        ...serverPost,
+                        images: serverPost.images || imageDataUrls,
+                        authorName: serverPost.authorName || currentUser.name || '익명',
+                        authorEmail: serverPost.authorEmail || currentUser.email || '',
+                        description: serverPost.description || description
+                    }
+                    : post
+            ));
+            renderGalleryPosts();
+        } else {
+            // 서버 반영 지연 대비: UI 즉시 유지하고 약간 지연 후 동기화
+            setTimeout(() => loadGalleryPosts(true), 1500);
+        }
 
         document.getElementById('galleryForm').reset();
-        document.getElementById('galleryImagePreview').style.display = 'none';
+        clearGalleryUploadPreview();
         showToast(translations[currentLanguage].gallery_save_success);
-        // 백그라운드에서 서버 목록으로 교체 (서버 생성 id로 갱신)
-        loadGalleryPosts(true);
     } catch (error) {
+        if (optimisticId) {
+            currentGalleryPosts = currentGalleryPosts.filter((post) => post.id !== optimisticId);
+            renderGalleryPosts();
+        }
         const errorMessage = String(error && error.message ? error.message : error);
         const isTableMissing = errorMessage.includes('no such table: gallery_posts') || errorMessage.includes('gallery_posts table unavailable');
+        const isImageProcessingIssue =
+            isImageReadErrorMessage(errorMessage) ||
+            errorMessage.includes('HEIC 변환') ||
+            errorMessage.includes('이미지 처리 중 오류') ||
+            errorMessage.includes('이미지 캔버스 처리 실패');
+
+        if (isImageProcessingIssue) {
+            console.warn('[GALLERY] 이미지 처리 실패:', error);
+            alert(`사진 업로드 실패:\n\n${getGalleryUploadFriendlyMessage(error, files[0])}\n\n같은 사진이 계속 실패하면 JPG 파일로 변환 후 다시 시도해주세요.`);
+            return;
+        }
 
         if (isTableMissing) {
             isGalleryRemoteAvailable = false;
@@ -2539,7 +2773,7 @@ async function handleGallerySubmit(e) {
         addLocalGalleryPost(localPost);
 
         document.getElementById('galleryForm').reset();
-        document.getElementById('galleryImagePreview').style.display = 'none';
+        clearGalleryUploadPreview();
         showToast('⚠️ 서버 미연결 — 이 기기에만 임시 저장됩니다.');
         await loadGalleryPosts();
     } finally {
