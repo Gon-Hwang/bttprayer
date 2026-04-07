@@ -1986,12 +1986,14 @@ async function handlePrayerSubmit(e) {
         if (response.ok) {
             // 폼 초기화
             document.getElementById('prayerForm').reset();
-            
-            // 목록 새로고침
-            await loadPrayers();
-            
+
+            // 서버에서 반환된 새 기도제목을 즉시 목록 맨 앞에 추가
+            const newPrayer = await response.json();
+            currentPrayers.unshift(newPrayer);
+            await renderPrayers();
+
             // 성공 메시지
-            alert('기도 제목이 등록되었습니다. 함께 기도합니다! 🙏');
+            showToast('기도 제목이 등록되었습니다. 함께 기도합니다! 🙏');
         } else {
             throw new Error('등록 실패');
         }
@@ -2070,7 +2072,9 @@ async function deletePrayer(id) {
         });
         
         if (response.ok) {
-            await loadPrayers();
+            // 로컬 목록에서 즉시 제거
+            currentPrayers = currentPrayers.filter(p => p.id !== id);
+            await renderPrayers();
             showToast('기도 제목이 삭제되었습니다.');
         }
     } catch (error) {
