@@ -1440,6 +1440,7 @@ section {
     line-height: 1.9;
     margin-bottom: 1.5rem;
     font-size: 1.05rem;
+    white-space: pre-wrap;
 }
 
 .item-actions {
