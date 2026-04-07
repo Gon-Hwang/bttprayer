@@ -58,10 +58,9 @@ function closeConfirmModal(result) {
 const CURRENT_HOST = window.location.hostname;
 const IS_LOCAL_OR_LAN = CURRENT_HOST === 'localhost' || /^(127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})$/.test(CURRENT_HOST);
 
-// 현재 배포본에서 /tables 라우트가 정적 index로 매핑되어 데이터 API가 깨질 수 있어
-// API가 정상 동작하는 고정 Pages 배포 URL을 우선 사용한다.
-const STABLE_API_ORIGIN = 'https://b7ddfb06.bttprayer.pages.dev/';
-const API_BASE_URL = CURRENT_HOST === 'b7ddfb06.bttprayer.pages.dev' ? '' : STABLE_API_ORIGIN;
+// Pages Functions(/functions/tables/)가 배포되어 모든 배포본에서 API가 직접 처리된다.
+const STABLE_API_ORIGIN = '';
+const API_BASE_URL = '';
 
 // 상대 경로(tables/...) 요청을 환경에 맞는 절대 경로로 변환
 const nativeFetch = window.fetch.bind(window);
