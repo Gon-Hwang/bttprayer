@@ -37,6 +37,17 @@ export async function onRequest(context) {
     return corsResponse(JSON.stringify({ error: 'Database not configured' }), 500);
   }
 
+  // gallery_posts 테이블에 likes 컬럼 자동 추가 (없을 경우)
+  if (table === 'gallery_posts') {
+    try {
+      const colInfo = await DB.prepare('PRAGMA table_info(gallery_posts)').all();
+      const cols = (colInfo.results || []).map(c => c.name);
+      if (!cols.includes('likes')) {
+        await DB.prepare('ALTER TABLE gallery_posts ADD COLUMN likes INTEGER DEFAULT 0').run();
+      }
+    } catch (_) {}
+  }
+
   try {
     if (method === 'GET') {
       const row = await DB.prepare(`SELECT * FROM ${table} WHERE id = ?`).bind(id).first();

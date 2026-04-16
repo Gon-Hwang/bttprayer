@@ -18,6 +18,7 @@ let isGalleryRemoteAvailable = true;
 let confirmModalResolver = null;
 const testimonyLikeInFlight = new Set();
 const prayerClickInFlight = new Set();
+const galleryLikeInFlight = new Set();
 let galleryLayoutColumns = 1;
 
 // iOS PWA standalone 모드에서 confirm()이 차단되는 문제를 우회하는 커스텀 confirm
@@ -58,9 +59,10 @@ function closeConfirmModal(result) {
 const CURRENT_HOST = window.location.hostname;
 const IS_LOCAL_OR_LAN = CURRENT_HOST === 'localhost' || /^(127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})$/.test(CURRENT_HOST);
 
-// Pages Functions(/functions/tables/)가 배포되어 모든 배포본에서 API가 직접 처리된다.
-const STABLE_API_ORIGIN = '';
-const API_BASE_URL = '';
+// 로컬/LAN에서는 운영 도메인 API를 사용해 웹과 동일하게 동작시킨다.
+const STABLE_API_ORIGIN = 'https://bttprayer.net/';
+const IS_PRODUCTION_HOST = CURRENT_HOST === 'bttprayer.net' || CURRENT_HOST === 'www.bttprayer.net';
+const API_BASE_URL = IS_PRODUCTION_HOST ? '' : STABLE_API_ORIGIN;
 
 // 상대 경로(tables/...) 요청을 환경에 맞는 절대 경로로 변환
 const nativeFetch = window.fetch.bind(window);
@@ -329,6 +331,9 @@ const translations = {
         gallery_dropzone_hint: 'JPG, PNG, HEIC · 한 번에 최대 4장',
         gallery_max_toast: '최대 4장까지 선택할 수 있어요. 앞의 4장만 반영했습니다.',
         gallery_remove_photo: '이 사진 빼기',
+        gallery_like_button: '좋아요',
+        gallery_like_count_suffix: '명이 좋아해요',
+        gallery_like_error: '좋아요 처리 중 오류가 발생했습니다.',
         gallery_description_label: '설명',
         gallery_description_placeholder: '사역 활동 사진 설명을 입력하세요...',
         gallery_submit: '갤러리 등록',
@@ -510,6 +515,9 @@ const translations = {
         gallery_dropzone_hint: 'JPG, PNG, HEIC · Up to 4 at once',
         gallery_max_toast: 'You can select up to 4 photos. Only the first 4 were kept.',
         gallery_remove_photo: 'Remove this photo',
+        gallery_like_button: 'Like',
+        gallery_like_count_suffix: 'likes',
+        gallery_like_error: 'An error occurred while updating likes.',
         gallery_description_label: 'Description',
         gallery_description_placeholder: 'Write a short description of this ministry activity...',
         gallery_submit: 'Post Gallery',
@@ -2522,6 +2530,8 @@ function renderGalleryPosts() {
     if (!galleryList) return;
 
     const t = translations[currentLanguage];
+    const currentUserKey = getCurrentUserKey();
+    const likedItems = getUserActionList('likedGalleryPostsByUser', currentUserKey);
     if (!currentGalleryPosts || currentGalleryPosts.length === 0) {
         galleryList.innerHTML = `<div class="loading">${t.gallery_empty}</div>`;
         return;
@@ -2533,6 +2543,12 @@ function renderGalleryPosts() {
         const author = escapeHtml(post.authorName || post.name || '익명');
         const createdAt = formatDate(post.created_at || post.date || new Date().toISOString());
         const canDelete = canDeleteGalleryPost(post);
+        const hasLiked = currentUserKey ? likedItems.includes(post.id) : false;
+        const isProcessing = galleryLikeInFlight.has(post.id);
+        const likeBtnClass = `action-button like-btn gallery-like-btn${hasLiked ? ' liked' : ''}`;
+        const heartIcon = hasLiked ? 'fas fa-heart' : 'far fa-heart';
+        const likeCount = Number(post.likeCount || 0);
+        const likeCountLabel = escapeHtml(`${likeCount} ${t.gallery_like_count_suffix}`);
 
         return `
             <article class="gallery-item fade-in-up">
@@ -2551,16 +2567,81 @@ function renderGalleryPosts() {
                 <div class="gallery-images">
                     ${imageUrls.map((url, index) => `<div class="gallery-image-wrap"><img src="${url}" alt="gallery-photo-${index + 1}" loading="lazy" onclick="openLightbox(this.src)"></div>`).join('')}
                 </div>
-                ${canDelete ? `
-                    <div class="item-actions gallery-item-actions">
+                <div class="gallery-like-count"><i class="fas fa-heart"></i> <span>${likeCountLabel}</span></div>
+                <div class="item-actions gallery-item-actions">
+                    <button class="${likeBtnClass}" data-gallery-like-id="${post.id}" ${isProcessing ? 'disabled' : ''}>
+                        <i class="${heartIcon}"></i> ${t.gallery_like_button}
+                    </button>
+                    ${canDelete ? `
                         <button class="action-button delete gallery-delete-btn" data-post-id="${post.id}" data-local-only="${post.localOnly ? '1' : '0'}">
                             <i class="fas fa-trash"></i> ${t.btn_delete}
                         </button>
-                    </div>
-                ` : ''}
+                    ` : ''}
+                </div>
             </article>
         `;
     }).join('');
+}
+
+async function likeGalleryPost(postId) {
+    if (galleryLikeInFlight.has(postId)) return;
+    const currentUserKey = getCurrentUserKey();
+    if (!currentUserKey) {
+        showToast('로그인 후 이용할 수 있습니다.');
+        return;
+    }
+
+    const targetPost = currentGalleryPosts.find((post) => String(post.id) === String(postId));
+    if (!targetPost) return;
+
+    galleryLikeInFlight.add(postId);
+    try {
+        const likedItems = getUserActionList('likedGalleryPostsByUser', currentUserKey);
+        const hasLiked = likedItems.includes(postId);
+        const currentCount = Number(targetPost.likeCount || 0);
+        const newCount = hasLiked ? Math.max(0, currentCount - 1) : currentCount + 1;
+
+        if (targetPost.localOnly) {
+            targetPost.likeCount = newCount;
+            const nextLikedItems = hasLiked
+                ? likedItems.filter((itemId) => itemId !== postId)
+                : [...likedItems, postId];
+            saveUserActionList('likedGalleryPostsByUser', currentUserKey, nextLikedItems);
+            const localPosts = getLocalGalleryPosts().map((post) => (
+                String(post.id) === String(postId) ? { ...post, likeCount: newCount } : post
+            ));
+            saveLocalGalleryPosts(localPosts);
+            renderGalleryPosts();
+            return;
+        }
+
+        const updateMethod = API_BASE_URL ? 'PUT' : 'PATCH';
+        const response = await fetch(`tables/gallery_posts/${postId}`, {
+            method: updateMethod,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ likeCount: newCount })
+        });
+
+        if (!response.ok) {
+            let errorBody = '';
+            try { errorBody = await response.text(); } catch (_) {}
+            throw new Error(`좋아요 업데이트 실패 (${response.status})${errorBody ? `: ${errorBody}` : ''}`);
+        }
+
+        targetPost.likeCount = newCount;
+        const nextLikedItems = hasLiked
+            ? likedItems.filter((itemId) => itemId !== postId)
+            : [...likedItems, postId];
+        saveUserActionList('likedGalleryPostsByUser', currentUserKey, nextLikedItems);
+        renderGalleryPosts();
+    } catch (error) {
+        console.error('갤러리 좋아요 오류:', error);
+        showToast(translations[currentLanguage].gallery_like_error);
+    } finally {
+        galleryLikeInFlight.delete(postId);
+    }
 }
 
 function removeLocalGalleryPostById(id) {
@@ -2616,6 +2697,13 @@ async function deleteGalleryPost(postId, isLocalOnly) {
 }
 
 async function handleGalleryListClick(e) {
+    const likeBtn = e.target.closest('.gallery-like-btn');
+    if (likeBtn) {
+        const likeId = likeBtn.dataset.galleryLikeId;
+        if (!likeId) return;
+        await likeGalleryPost(likeId);
+        return;
+    }
     const deleteBtn = e.target.closest('.gallery-delete-btn');
     if (!deleteBtn) return;
     const postId = deleteBtn.dataset.postId;
@@ -2782,6 +2870,7 @@ async function handleGallerySubmit(e) {
             authorEmail: currentUser.email || '',
             description: description,
             images: imageDataUrls,
+            likeCount: 0,
             date: new Date().toISOString(),
             optimistic: true
         };
@@ -2828,6 +2917,7 @@ async function handleGallerySubmit(e) {
                         images: serverPost.images || imageDataUrls,
                         authorName: serverPost.authorName || currentUser.name || '익명',
                         authorEmail: serverPost.authorEmail || currentUser.email || '',
+                        likeCount: Number(serverPost.likeCount || 0),
                         description: serverPost.description || description
                     }
                     : post
@@ -2877,6 +2967,7 @@ async function handleGallerySubmit(e) {
             authorEmail: currentUser.email || '',
             description: description,
             images: imageDataUrls,
+            likeCount: 0,
             date: new Date().toISOString(),
             localOnly: true
         };
@@ -3307,15 +3398,20 @@ async function exportAllData() {
     showOperationStatus('데이터를 수집하는 중...', 'info');
     
     try {
-        // 모든 테이블 데이터 가져오기 (limit을 1000으로 줄임)
+        // 기본 테이블 데이터
         const [membersRes, prayersRes, testimoniesRes, noticesRes] = await Promise.all([
             fetch('tables/members?limit=1000&sort=-created_at'),
             fetch('tables/prayers?limit=1000&sort=-created_at'),
             fetch('tables/testimonies?limit=1000&sort=-created_at'),
             fetch('tables/notices?limit=1000&sort=-created_at')
         ]);
+
+        // 사진 데이터는 로컬에서만 전체 백업에 포함
+        const galleryRes = IS_LOCAL_OR_LAN
+            ? await fetch('tables/gallery_posts?limit=1000&sort=-created_at')
+            : null;
         
-        if (!membersRes.ok || !prayersRes.ok || !testimoniesRes.ok || !noticesRes.ok) {
+        if (!membersRes.ok || !prayersRes.ok || !testimoniesRes.ok || !noticesRes.ok || (galleryRes && !galleryRes.ok)) {
             throw new Error('데이터를 불러오는 중 오류가 발생했습니다.');
         }
         
@@ -3323,6 +3419,7 @@ async function exportAllData() {
         const prayers = await prayersRes.json();
         const testimonies = await testimoniesRes.json();
         const notices = await noticesRes.json();
+        const gallery = galleryRes ? await galleryRes.json() : { data: [] };
         
         const exportData = {
             exportDate: new Date().toISOString(),
@@ -3332,18 +3429,25 @@ async function exportAllData() {
                 members: members.data || [],
                 prayers: prayers.data || [],
                 testimonies: testimonies.data || [],
-                notices: notices.data || []
+                notices: notices.data || [],
+                galleryPosts: gallery.data || []
             },
             statistics: {
                 totalMembers: (members.data || []).length,
                 totalPrayers: (prayers.data || []).length,
                 totalTestimonies: (testimonies.data || []).length,
-                totalNotices: (notices.data || []).length
+                totalNotices: (notices.data || []).length,
+                totalGalleryPosts: (gallery.data || []).length
             }
         };
         
         downloadJSON(exportData, `보좌앞에서_전체백업_${formatDateForFilename()}.json`);
-        showOperationStatus(`✅ 전체 데이터 내보내기 완료! (총 ${exportData.statistics.totalMembers + exportData.statistics.totalPrayers + exportData.statistics.totalTestimonies + exportData.statistics.totalNotices}개 항목)`, 'success');
+        const totalItems = exportData.statistics.totalMembers
+            + exportData.statistics.totalPrayers
+            + exportData.statistics.totalTestimonies
+            + exportData.statistics.totalNotices
+            + exportData.statistics.totalGalleryPosts;
+        showOperationStatus(`✅ 전체 데이터 내보내기 완료! (총 ${totalItems}개 항목)`, 'success');
         
     } catch (error) {
         console.error('데이터 내보내기 오류:', error);
@@ -3467,6 +3571,35 @@ async function exportNotices() {
     }
 }
 
+// 사진만 내보내기
+async function exportGalleryPosts() {
+    if (!currentUser || !isUserAdmin(currentUser)) {
+        alert('관리자만 데이터를 내보낼 수 있습니다.');
+        return;
+    }
+    
+    showOperationStatus('사진 데이터를 수집하는 중...', 'info');
+    
+    try {
+        const response = await fetch('tables/gallery_posts?limit=10000&sort=-created_at');
+        const data = await response.json();
+        
+        const exportData = {
+            exportDate: new Date().toISOString(),
+            exportedBy: currentUser.name,
+            dataType: 'gallery_posts',
+            data: data.data || []
+        };
+        
+        downloadJSON(exportData, `사진갤러리_${formatDateForFilename()}.json`);
+        showOperationStatus(`✅ 사진 데이터 내보내기 완료! (${exportData.data.length}개)`, 'success');
+        
+    } catch (error) {
+        console.error('사진 데이터 내보내기 오류:', error);
+        showOperationStatus(`❌ 오류: ${error.message}`, 'error');
+    }
+}
+
 // JSON 파일 다운로드
 function downloadJSON(data, filename) {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -3560,11 +3693,13 @@ async function processImportData(importData) {
         return;
     }
     
+    const galleryImportItems = IS_LOCAL_OR_LAN ? (importData.data.galleryPosts || []) : [];
     const totalItems = 
         (importData.data.members || []).length +
         (importData.data.prayers || []).length +
         (importData.data.testimonies || []).length +
-        (importData.data.notices || []).length;
+        (importData.data.notices || []).length +
+        galleryImportItems.length;
     
     console.log('[IMPORT] 총 항목 수:', totalItems);
     
@@ -3580,6 +3715,7 @@ async function processImportData(importData) {
         `기도 제목: ${(importData.data.prayers || []).length}개\n` +
         `간증: ${(importData.data.testimonies || []).length}개\n` +
         `공지사항: ${(importData.data.notices || []).length}개\n` +
+        `사진: ${galleryImportItems.length}개\n` +
         `총: ${totalItems}개\n\n` +
         `⚠️ 주의: 이 작업은 시간이 걸릴 수 있습니다.`;
     
@@ -3627,6 +3763,27 @@ async function processImportData(importData) {
         
         systemFields.forEach(field => delete cleaned[field]);
         
+        return cleaned;
+    };
+    const cleanGalleryFields = (data) => {
+        const cleaned = { ...data };
+        const systemFields = [
+            'id',
+            'gs_project_id',
+            'gs_table_name',
+            'created_at',
+            'updated_at',
+            '_rid',
+            '_self',
+            '_etag',
+            '_attachments',
+            '_ts',
+            'deleted',
+            'deleted_at',
+            'localOnly',
+            'optimistic'
+        ];
+        systemFields.forEach(field => delete cleaned[field]);
         return cleaned;
     };
     
@@ -3777,6 +3934,47 @@ async function processImportData(importData) {
                     }
                 } catch (error) {
                     console.error('[IMPORT] 공지사항 추가 오류:', notice.title, error);
+                    errorCount++;
+                    processedCount++;
+                }
+            }
+        }
+
+        // 사진 가져오기 (로컬에서만)
+        if (galleryImportItems.length > 0) {
+            console.log('[IMPORT] 사진 데이터 가져오기 시작:', galleryImportItems.length, '개');
+            for (const galleryPost of galleryImportItems) {
+                try {
+                    const galleryData = cleanGalleryFields(galleryPost);
+                    if (Array.isArray(galleryData.images)) {
+                        galleryData.images = JSON.stringify(galleryData.images);
+                    }
+                    if (!galleryData.authorName) {
+                        galleryData.authorName = galleryData.name || '익명';
+                    }
+                    if (typeof galleryData.likeCount !== 'number') {
+                        galleryData.likeCount = Number(galleryData.likeCount || 0);
+                    }
+
+                    processedCount++;
+                    showOperationStatus(`데이터를 업로드하는 중... (${processedCount}/${totalItems})`, 'info');
+
+                    const response = await fetch('tables/gallery_posts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(galleryData)
+                    });
+
+                    if (response.ok) {
+                        successCount++;
+                        console.log('[IMPORT] ✅ 사진 추가 성공:', galleryData.description || galleryData.authorName || '(no description)');
+                    } else {
+                        const errorText = await response.text();
+                        console.error('[IMPORT] ❌ 사진 추가 실패:', response.status, errorText);
+                        errorCount++;
+                    }
+                } catch (error) {
+                    console.error('[IMPORT] 사진 추가 오류:', error);
                     errorCount++;
                     processedCount++;
                 }
@@ -4368,6 +4566,7 @@ window.exportMembers = exportMembers;
 window.exportPrayers = exportPrayers;
 window.exportTestimonies = exportTestimonies;
 window.exportNotices = exportNotices;
+window.exportGalleryPosts = exportGalleryPosts;
 window.handleImportFile = handleImportFile;
 window.testDatabaseConnection = testDatabaseConnection;
 window.testDataUpload = testDataUpload;

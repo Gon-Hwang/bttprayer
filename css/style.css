@@ -2546,6 +2546,37 @@ section {
 
 .gallery-item-actions {
     margin-top: 0.3rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+}
+
+.gallery-like-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.85rem;
+    padding: 0.42rem 0.78rem;
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(79, 172, 254, 0.12), rgba(0, 242, 254, 0.12));
+    color: #0f172a;
+    font-size: 0.87rem;
+    font-weight: 700;
+}
+
+.gallery-like-count i {
+    color: #22a6ff;
+}
+
+.gallery-item-actions .gallery-like-btn {
+    min-width: 104px;
+}
+
+.gallery-item-actions .gallery-like-btn:disabled {
+    opacity: 0.8;
+    cursor: not-allowed;
 }
 
 @media (max-width: 768px) {
