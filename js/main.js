@@ -322,6 +322,7 @@ const translations = {
         testimonies_button: '할렐루야',
         testimonies_loading: '간증을 불러오는 중...',
         testimonies_empty: '아직 등록된 간증이 없습니다. 하나님의 응답하신 간증을 나눠주세요!',
+        testimonies_like_count_suffix: '명이 좋아해요',
 
         // 사역 사진 갤러리
         gallery_title: '사진갤러리',
@@ -334,6 +335,10 @@ const translations = {
         gallery_like_button: '좋아요',
         gallery_like_count_suffix: '명이 좋아해요',
         gallery_like_error: '좋아요 처리 중 오류가 발생했습니다.',
+        gallery_edit_button: '설명 수정',
+        gallery_edit_prompt: '사진 설명을 수정하세요:',
+        gallery_edit_success: '사진 설명이 수정되었습니다.',
+        gallery_edit_error: '사진 설명 수정 중 오류가 발생했습니다.',
         gallery_description_label: '설명',
         gallery_description_placeholder: '사역 활동 사진 설명을 입력하세요...',
         gallery_submit: '갤러리 등록',
@@ -506,6 +511,7 @@ const translations = {
         testimonies_button: 'Hallelujah',
         testimonies_loading: 'Loading testimonies...',
         testimonies_empty: 'No testimonies yet. Share God\'s answered prayers!',
+        testimonies_like_count_suffix: 'likes',
 
         // Ministry gallery
         gallery_title: 'Ministry Photo Gallery',
@@ -518,6 +524,10 @@ const translations = {
         gallery_like_button: 'Like',
         gallery_like_count_suffix: 'likes',
         gallery_like_error: 'An error occurred while updating likes.',
+        gallery_edit_button: 'Edit description',
+        gallery_edit_prompt: 'Edit photo description:',
+        gallery_edit_success: 'Photo description updated.',
+        gallery_edit_error: 'Failed to update photo description.',
         gallery_description_label: 'Description',
         gallery_description_placeholder: 'Write a short description of this ministry activity...',
         gallery_submit: 'Post Gallery',
@@ -2136,6 +2146,7 @@ async function renderTestimonies() {
         const canDelete = canDeleteTestimonyPost(testimony);
         const likeBtnClass = hasLiked ? 'action-button like-btn liked' : 'action-button like-btn';
         const heartIcon = hasLiked ? 'fas fa-heart' : 'far fa-heart';
+        const likeCountLabel = escapeHtml(`${Number(testimony.likeCount || 0)} ${t.testimonies_like_count_suffix}`);
         
         // 제목과 내용 번역
         const displayTitle = await getTranslatedContent(testimony.title, currentLanguage);
@@ -2143,7 +2154,7 @@ async function renderTestimonies() {
         
         return `
         <div class="testimony-item fade-in-up" data-id="${testimony.id}">
-            <div class="item-header">
+                <div class="item-header">
                 <div>
                     <h3 class="item-title">${escapeHtml(displayTitle)}</h3>
                     <div class="item-meta">
@@ -2151,12 +2162,9 @@ async function renderTestimonies() {
                         <span><i class="fas fa-calendar"></i> ${formatDate(testimony.created_at)}</span>
                     </div>
                 </div>
-                <div class="testimony-like-count">
-                    <i class="fas fa-heart"></i>
-                    <span>${testimony.likeCount || 0}</span>
-                </div>
             </div>
             <p class="item-content">${escapeHtml(displayContent)}</p>
+                <div class="post-like-count"><i class="fas fa-heart"></i> <span>${likeCountLabel}</span></div>
             <div class="item-actions">
                 <button class="${likeBtnClass}" onclick="likeTestimony('${testimony.id}')" ${isProcessing ? 'disabled' : ''}>
                     <i class="${heartIcon}"></i> ${t.testimonies_button}
@@ -2516,6 +2524,10 @@ function canDeleteGalleryPost(post) {
     return canDeleteAuthoredPost(post);
 }
 
+function canEditGalleryPost(post) {
+    return canDeleteGalleryPost(post);
+}
+
 function parseGalleryImages(rawImages) {
     if (Array.isArray(rawImages)) {
         return rawImages.filter(Boolean);
@@ -2677,6 +2689,7 @@ function renderGalleryPosts() {
             : (post.created_at || post.date || new Date().toISOString());
         const createdAt = formatDate(dateForCard);
         const canDelete = canDeleteGalleryPost(post);
+        const canEdit = canEditGalleryPost(post);
         const hasLiked = currentUserKey ? likedItems.includes(post.id) : false;
         const isProcessing = galleryLikeInFlight.has(post.id);
         const likeBtnClass = `action-button like-btn gallery-like-btn${hasLiked ? ' liked' : ''}`;
@@ -2701,11 +2714,16 @@ function renderGalleryPosts() {
                 <div class="gallery-images">
                     ${imageUrls.map((url, index) => `<div class="gallery-image-wrap"><img src="${url}" alt="gallery-photo-${index + 1}" loading="lazy" onclick="openLightbox(this.src)"></div>`).join('')}
                 </div>
-                <div class="gallery-like-count"><i class="fas fa-heart"></i> <span>${likeCountLabel}</span></div>
+                <div class="post-like-count"><i class="fas fa-heart"></i> <span>${likeCountLabel}</span></div>
                 <div class="item-actions gallery-item-actions">
                     <button class="${likeBtnClass}" data-gallery-like-id="${post.id}" ${isProcessing ? 'disabled' : ''}>
                         <i class="${heartIcon}"></i> ${t.gallery_like_button}
                     </button>
+                    ${canEdit ? `
+                        <button class="action-button edit gallery-edit-btn" data-post-id="${post.id}" data-local-only="${post.localOnly ? '1' : '0'}">
+                            <i class="fas fa-pen"></i> ${t.gallery_edit_button}
+                        </button>
+                    ` : ''}
                     ${canDelete ? `
                         <button class="action-button delete gallery-delete-btn" data-post-id="${post.id}" data-local-only="${post.localOnly ? '1' : '0'}">
                             <i class="fas fa-trash"></i> ${t.btn_delete}
@@ -2830,12 +2848,75 @@ async function deleteGalleryPost(postId, isLocalOnly) {
     }
 }
 
+async function editGalleryPostDescription(postId, isLocalOnly) {
+    const targetPost = currentGalleryPosts.find((post) => String(post.id) === String(postId));
+    if (!targetPost) {
+        showToast('게시물을 찾을 수 없습니다.');
+        return;
+    }
+    if (!canEditGalleryPost(targetPost)) {
+        alert('본인이 올린 사진 또는 관리자만 수정할 수 있습니다.');
+        return;
+    }
+
+    const t = translations[currentLanguage];
+    const currentDesc = String(targetPost.description || '');
+    const nextDesc = window.prompt(t.gallery_edit_prompt, currentDesc);
+    if (nextDesc === null) return;
+
+    const trimmed = nextDesc.trim();
+    if (trimmed === currentDesc.trim()) return;
+
+    try {
+        if (isLocalOnly) {
+            targetPost.description = trimmed;
+            const localPosts = getLocalGalleryPosts().map((post) => (
+                String(post.id) === String(postId) ? { ...post, description: trimmed } : post
+            ));
+            saveLocalGalleryPosts(localPosts);
+            renderGalleryPosts();
+            showToast(t.gallery_edit_success);
+            return;
+        }
+
+        const updateMethod = API_BASE_URL ? 'PUT' : 'PATCH';
+        const response = await fetch(`tables/gallery_posts/${postId}`, {
+            method: updateMethod,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ description: trimmed })
+        });
+
+        if (!response.ok) {
+            let errText = '';
+            try { errText = await response.text(); } catch (_) {}
+            throw new Error(`설명 수정 실패 (${response.status})${errText ? `: ${errText}` : ''}`);
+        }
+
+        targetPost.description = trimmed;
+        renderGalleryPosts();
+        showToast(t.gallery_edit_success);
+    } catch (error) {
+        console.error('갤러리 설명 수정 오류:', error);
+        showToast(t.gallery_edit_error);
+    }
+}
+
 async function handleGalleryListClick(e) {
     const likeBtn = e.target.closest('.gallery-like-btn');
     if (likeBtn) {
         const likeId = likeBtn.dataset.galleryLikeId;
         if (!likeId) return;
         await likeGalleryPost(likeId);
+        return;
+    }
+    const editBtn = e.target.closest('.gallery-edit-btn');
+    if (editBtn) {
+        const postId = editBtn.dataset.postId;
+        const isLocalOnly = editBtn.dataset.localOnly === '1';
+        if (!postId) return;
+        await editGalleryPostDescription(postId, isLocalOnly);
         return;
     }
     const deleteBtn = e.target.closest('.gallery-delete-btn');
