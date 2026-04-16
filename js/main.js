@@ -2318,15 +2318,21 @@ async function loadGalleryPosts(silent = false) {
 
     try {
         const ts = Date.now();
-        const response = await fetchWithRetry(`tables/gallery_posts?limit=100&sort=-created_at&_=${ts}`);
+        const response = await fetchWithRetry(`tables/gallery_posts?limit=1000&sort=-created_at&_=${ts}`);
         const data = await response.json();
         const remotePosts = data.data || [];
         const localPosts = getLocalGalleryPosts();
-        currentGalleryPosts = [...localPosts, ...remotePosts].sort((a, b) => {
-            const aTime = new Date(a.created_at || a.date || 0).getTime();
-            const bTime = new Date(b.created_at || b.date || 0).getTime();
-            return bTime - aTime;
-        });
+        currentGalleryPosts = [...localPosts, ...remotePosts];
+        // 운영 웹(bttprayer.net)에서만: API 순서와 무관하게 표시용 시각으로 최신순 고정
+        if (IS_PRODUCTION_HOST) {
+            sortGalleryPostsNewestFirst(currentGalleryPosts);
+        } else {
+            currentGalleryPosts.sort((a, b) => {
+                const aTime = new Date(a.created_at || a.date || 0).getTime();
+                const bTime = new Date(b.created_at || b.date || 0).getTime();
+                return bTime - aTime;
+            });
+        }
         renderGalleryPosts();
     } catch (error) {
         const errorMessage = String(error && error.message ? error.message : error);
@@ -2525,6 +2531,131 @@ function parseGalleryImages(rawImages) {
     return [];
 }
 
+function getGalleryPostTimestamp(post) {
+    return new Date(post.created_at || post.date || 0).getTime();
+}
+
+/** 웹(bttprayer.net) 목록 정렬용: 게시물 date 우선(화면 표시와 동일), 없으면 created_at, 그다음 updated_at */
+function getGallerySortTimeMsForDisplay(post) {
+    const parse = (v) => {
+        if (!v) return NaN;
+        const t = new Date(v).getTime();
+        return Number.isFinite(t) ? t : NaN;
+    };
+    const d = parse(post.date);
+    const c = parse(post.created_at);
+    const u = parse(post.updated_at);
+    if (Number.isFinite(d) && d > 0) return d;
+    if (Number.isFinite(c) && c > 0) return c;
+    if (Number.isFinite(u) && u > 0) return u;
+    return 0;
+}
+
+/** 최신 글이 먼저(내림차순). 동일 시각은 id로 안정 정렬 */
+function sortGalleryPostsNewestFirst(posts) {
+    if (!Array.isArray(posts) || posts.length < 2) return;
+    posts.sort((a, b) => {
+        const bt = getGallerySortTimeMsForDisplay(b);
+        const at = getGallerySortTimeMsForDisplay(a);
+        if (bt !== at) return bt - at;
+        return String(b.id || '').localeCompare(String(a.id || ''));
+    });
+}
+
+/** 동일 게시물 판별: 설명(공백 정규화) + 이미지 URL 집합(순서 무시) */
+function buildGalleryDuplicateSignature(post) {
+    const desc = String(post.description || '').trim().replace(/\s+/g, ' ');
+    const urls = parseGalleryImages(post.images).map(String).sort();
+    if (urls.length === 0) {
+        return `__empty_images__:${post.id}`;
+    }
+    return `${desc}\n${urls.join('\x1f')}`;
+}
+
+/**
+ * 관리자: 갤러리 중복 게시물 삭제 (동일 이미지+설명 → 가장 먼저 올린 글만 유지).
+ * 목록은 업로드 시각 기준 최신순으로 다시 맞춤.
+ */
+async function adminDedupeGalleryPosts() {
+    if (!currentUser || !isUserAdmin(currentUser)) {
+        alert('관리자만 실행할 수 있습니다.');
+        return;
+    }
+
+    if (!await showConfirm(
+        '사진갤러리에서 "같은 사진 + 같은 설명"인 중복 글을 정리합니다.\n\n'
+        + '가장 먼저 올린 글만 남기고 나머지는 삭제됩니다.\n'
+        + '계속할까요?'
+    )) {
+        return;
+    }
+
+    showOperationStatus('갤러리 중복을 분석하는 중...', 'info');
+
+    let removed = 0;
+
+    try {
+        // 로컬 임시 저장 글만 dedupe (서버와 무관)
+        const locals = getLocalGalleryPosts();
+        if (locals.length) {
+            const localGroups = new Map();
+            locals.forEach((p) => {
+                const sig = buildGalleryDuplicateSignature(p);
+                if (!localGroups.has(sig)) localGroups.set(sig, []);
+                localGroups.get(sig).push(p);
+            });
+            const nextLocal = [];
+            localGroups.forEach((list) => {
+                list.sort((a, b) => getGalleryPostTimestamp(a) - getGalleryPostTimestamp(b));
+                nextLocal.push(list[0]);
+                removed += list.length - 1;
+            });
+            nextLocal.sort((a, b) => getGalleryPostTimestamp(b) - getGalleryPostTimestamp(a));
+            saveLocalGalleryPosts(nextLocal);
+        }
+
+        if (isGalleryRemoteAvailable) {
+            const res = await fetch('tables/gallery_posts?limit=10000&sort=-created_at');
+            if (!res.ok) {
+                const t = await res.text().catch(() => '');
+                throw new Error(`갤러리 목록을 불러오지 못했습니다 (${res.status}) ${t}`.trim());
+            }
+            const json = await res.json();
+            const remote = json.data || [];
+            const remoteGroups = new Map();
+            remote.forEach((p) => {
+                const sig = buildGalleryDuplicateSignature(p);
+                if (!remoteGroups.has(sig)) remoteGroups.set(sig, []);
+                remoteGroups.get(sig).push(p);
+            });
+
+            for (const [, list] of remoteGroups) {
+                if (list.length < 2) continue;
+                list.sort((a, b) => getGalleryPostTimestamp(a) - getGalleryPostTimestamp(b));
+                const duplicates = list.slice(1);
+                for (const dup of duplicates) {
+                    const del = await fetch(`tables/gallery_posts/${dup.id}`, { method: 'DELETE' });
+                    if (del.ok || del.status === 404) {
+                        removed += 1;
+                    } else {
+                        const errText = await del.text().catch(() => '');
+                        console.warn('[GALLERY DEDUPE] 삭제 실패:', dup.id, del.status, errText);
+                    }
+                    await new Promise((r) => setTimeout(r, 80));
+                }
+            }
+        }
+
+        await loadGalleryPosts(true);
+        showOperationStatus(`✅ 갤러리 중복 정리 완료 (삭제·병합 ${removed}건)`, 'success');
+        showToast(`갤러리 중복 정리 완료 (${removed}건)`);
+    } catch (error) {
+        console.error('[GALLERY DEDUPE]', error);
+        showOperationStatus(`❌ 중복 정리 오류: ${error.message}`, 'error');
+        alert(`중복 정리 중 오류가 발생했습니다.\n\n${error.message}`);
+    }
+}
+
 function renderGalleryPosts() {
     const galleryList = document.getElementById('galleryList');
     if (!galleryList) return;
@@ -2541,7 +2672,10 @@ function renderGalleryPosts() {
         const imageUrls = parseGalleryImages(post.images);
         const safeDescription = escapeHtml(post.description || '');
         const author = escapeHtml(post.authorName || post.name || '익명');
-        const createdAt = formatDate(post.created_at || post.date || new Date().toISOString());
+        const dateForCard = IS_PRODUCTION_HOST
+            ? (post.date || post.created_at || post.updated_at || new Date().toISOString())
+            : (post.created_at || post.date || new Date().toISOString());
+        const createdAt = formatDate(dateForCard);
         const canDelete = canDeleteGalleryPost(post);
         const hasLiked = currentUserKey ? likedItems.includes(post.id) : false;
         const isProcessing = galleryLikeInFlight.has(post.id);
@@ -4567,6 +4701,7 @@ window.exportPrayers = exportPrayers;
 window.exportTestimonies = exportTestimonies;
 window.exportNotices = exportNotices;
 window.exportGalleryPosts = exportGalleryPosts;
+window.adminDedupeGalleryPosts = adminDedupeGalleryPosts;
 window.handleImportFile = handleImportFile;
 window.testDatabaseConnection = testDatabaseConnection;
 window.testDataUpload = testDataUpload;
