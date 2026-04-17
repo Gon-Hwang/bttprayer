@@ -14,7 +14,7 @@
     <link rel="icon" type="image/png" href="images/logo-new.png?v=2026031002">
     <link rel="apple-touch-icon" href="images/logo-new.png?v=2026031002">
     <link rel="manifest" href="manifest.webmanifest?v=2026031002">
-    <link rel="stylesheet" href="css/style.css?v=2026040703">
+    <link rel="stylesheet" href="css/style.css?v=2026041716">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
 </head>
@@ -765,10 +765,19 @@
         </div>
     </div>
 
-    <!-- 이미지 라이트박스 -->
+    <!-- 이미지 라이트박스 (같은 포스트 여러 장: 좌우 전환) -->
     <div id="galleryLightbox" class="gallery-lightbox" style="display:none;" onclick="closeLightbox()">
-        <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
-        <img id="galleryLightboxImg" src="" alt="사진 확대">
+        <button type="button" class="lightbox-close" onclick="event.stopPropagation(); closeLightbox();" aria-label="닫기">&times;</button>
+        <button type="button" id="galleryLightboxPrev" class="lightbox-nav lightbox-prev" onclick="event.stopPropagation(); lightboxPrev();" aria-label="이전 사진">
+            <i class="fas fa-chevron-left"></i>
+        </button>
+        <div class="gallery-lightbox-stage" onclick="event.stopPropagation();" role="dialog" aria-modal="true" aria-label="확대 이미지">
+            <img id="galleryLightboxImg" src="" alt="사진 확대">
+            <div id="galleryLightboxCounter" class="lightbox-counter" aria-live="polite"></div>
+        </div>
+        <button type="button" id="galleryLightboxNext" class="lightbox-nav lightbox-next" onclick="event.stopPropagation(); lightboxNext();" aria-label="다음 사진">
+            <i class="fas fa-chevron-right"></i>
+        </button>
     </div>
 
     <!-- 푸터 -->
@@ -793,6 +802,6 @@
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
-    <script src="js/main.js?v=2026041713"></script>
+    <script src="js/main.js?v=2026041716"></script>
 </body>
 </html>

@@ -618,6 +618,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeGalleryLayoutControls();
     setupScrollButton();
     setupMobileMenu();
+    initGalleryLightboxSwipe();
 });
 
 function setupPwaInstallPrompt() {
@@ -2697,8 +2698,10 @@ function renderGalleryPosts() {
         const likeCount = Number(post.likeCount || 0);
         const likeCountLabel = escapeHtml(`${likeCount} ${t.gallery_like_count_suffix}`);
 
+        const galleryImagesPayload = encodeURIComponent(JSON.stringify(imageUrls));
+
         return `
-            <article class="gallery-item fade-in-up">
+            <article class="gallery-item fade-in-up" data-gallery-images="${galleryImagesPayload}">
                 <div class="gallery-item-header">
                     <div class="gallery-author">
                         <i class="fas fa-user-circle"></i>
@@ -2712,24 +2715,26 @@ function renderGalleryPosts() {
                 </div>
                 <p class="gallery-description">${safeDescription}</p>
                 <div class="gallery-images">
-                    ${imageUrls.map((url, index) => `<div class="gallery-image-wrap"><img src="${url}" alt="gallery-photo-${index + 1}" loading="lazy" onclick="openLightbox(this.src)"></div>`).join('')}
+                    ${imageUrls.map((url, index) => `<div class="gallery-image-wrap"><img src="${url}" alt="gallery-photo-${index + 1}" loading="lazy" data-gallery-index="${index}" onclick="openGalleryLightbox(this)"></div>`).join('')}
                 </div>
-                <div class="post-like-count"><i class="fas fa-heart"></i> <span>${likeCountLabel}</span></div>
-                <div class="item-actions gallery-item-actions">
-                    <button class="${likeBtnClass}" data-gallery-like-id="${post.id}" ${isProcessing ? 'disabled' : ''}>
-                        <i class="${heartIcon}"></i> ${t.gallery_like_button}
-                    </button>
-                    ${canEdit ? `
-                        <button class="action-button edit gallery-edit-btn" data-post-id="${post.id}" data-local-only="${post.localOnly ? '1' : '0'}">
-                            <i class="fas fa-pen"></i> ${t.gallery_edit_button}
+                <footer class="gallery-item-footer">
+                    <div class="post-like-count"><i class="fas fa-heart"></i> <span>${likeCountLabel}</span></div>
+                    <div class="item-actions gallery-item-actions">
+                        <button class="${likeBtnClass}" data-gallery-like-id="${post.id}" ${isProcessing ? 'disabled' : ''}>
+                            <i class="${heartIcon}"></i> ${t.gallery_like_button}
                         </button>
-                    ` : ''}
-                    ${canDelete ? `
-                        <button class="action-button delete gallery-delete-btn" data-post-id="${post.id}" data-local-only="${post.localOnly ? '1' : '0'}">
-                            <i class="fas fa-trash"></i> ${t.btn_delete}
-                        </button>
-                    ` : ''}
-                </div>
+                        ${canEdit ? `
+                            <button class="action-button edit gallery-edit-btn" data-post-id="${post.id}" data-local-only="${post.localOnly ? '1' : '0'}">
+                                <i class="fas fa-pen"></i> ${t.gallery_edit_button}
+                            </button>
+                        ` : ''}
+                        ${canDelete ? `
+                            <button class="action-button delete gallery-delete-btn" data-post-id="${post.id}" data-local-only="${post.localOnly ? '1' : '0'}">
+                                <i class="fas fa-trash"></i> ${t.btn_delete}
+                            </button>
+                        ` : ''}
+                    </div>
+                </footer>
             </article>
         `;
     }).join('');
@@ -2927,19 +2932,128 @@ async function handleGalleryListClick(e) {
     await deleteGalleryPost(postId, isLocalOnly);
 }
 
-function openLightbox(src) {
+/** @type {string[]} */
+let galleryLightboxUrls = [];
+let galleryLightboxIndex = 0;
+let galleryLightboxTouchStartX = 0;
+
+function galleryLightboxKeydown(e) {
+    const lb = document.getElementById('galleryLightbox');
+    if (!lb || lb.style.display === 'none') return;
+    if (e.key === 'Escape') {
+        closeLightbox();
+        return;
+    }
+    if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        lightboxPrev();
+    } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        lightboxNext();
+    }
+}
+
+function updateGalleryLightboxNav() {
+    const prev = document.getElementById('galleryLightboxPrev');
+    const next = document.getElementById('galleryLightboxNext');
+    const counter = document.getElementById('galleryLightboxCounter');
+    const n = galleryLightboxUrls.length;
+    const multi = n > 1;
+    if (prev) {
+        prev.style.display = multi ? 'flex' : 'none';
+        prev.setAttribute('aria-hidden', multi ? 'false' : 'true');
+    }
+    if (next) {
+        next.style.display = multi ? 'flex' : 'none';
+        next.setAttribute('aria-hidden', multi ? 'false' : 'true');
+    }
+    if (counter) {
+        counter.textContent = multi ? `${galleryLightboxIndex + 1} / ${n}` : '';
+    }
+}
+
+function showGalleryLightboxAtIndex() {
     const lb = document.getElementById('galleryLightbox');
     const img = document.getElementById('galleryLightboxImg');
     if (!lb || !img) return;
-    img.src = src;
+    const n = galleryLightboxUrls.length;
+    if (n === 0) return;
+    galleryLightboxIndex = ((galleryLightboxIndex % n) + n) % n;
+    img.src = galleryLightboxUrls[galleryLightboxIndex];
+    img.alt = `gallery-photo-${galleryLightboxIndex + 1}`;
+    updateGalleryLightboxNav();
+}
+
+function openGalleryLightbox(img) {
+    const article = img && img.closest ? img.closest('.gallery-item') : null;
+    const raw = article && article.dataset ? article.dataset.galleryImages : '';
+    let urls = [];
+    if (raw) {
+        try {
+            urls = JSON.parse(decodeURIComponent(raw));
+        } catch (err) {
+            console.warn('[gallery lightbox] URL 목록 파싱 실패', err);
+        }
+    }
+    if (!Array.isArray(urls) || urls.length === 0) {
+        urls = [img.src];
+    }
+    let idx = Number(img.dataset.galleryIndex);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= urls.length) {
+        idx = urls.findIndex((u) => u === img.src || u === img.currentSrc);
+    }
+    if (idx < 0) idx = 0;
+    galleryLightboxUrls = urls;
+    galleryLightboxIndex = idx;
+
+    const lb = document.getElementById('galleryLightbox');
+    const outImg = document.getElementById('galleryLightboxImg');
+    if (!lb || !outImg) return;
+    document.removeEventListener('keydown', galleryLightboxKeydown);
+    showGalleryLightboxAtIndex();
     lb.style.display = 'flex';
     document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', galleryLightboxKeydown);
+}
+
+function lightboxPrev() {
+    const n = galleryLightboxUrls.length;
+    if (n <= 1) return;
+    galleryLightboxIndex = (galleryLightboxIndex - 1 + n) % n;
+    showGalleryLightboxAtIndex();
+}
+
+function lightboxNext() {
+    const n = galleryLightboxUrls.length;
+    if (n <= 1) return;
+    galleryLightboxIndex = (galleryLightboxIndex + 1) % n;
+    showGalleryLightboxAtIndex();
 }
 
 function closeLightbox() {
     const lb = document.getElementById('galleryLightbox');
     if (lb) lb.style.display = 'none';
     document.body.style.overflow = '';
+    document.removeEventListener('keydown', galleryLightboxKeydown);
+    galleryLightboxUrls = [];
+    galleryLightboxIndex = 0;
+}
+
+function initGalleryLightboxSwipe() {
+    const stage = document.querySelector('.gallery-lightbox-stage');
+    if (!stage || stage.dataset.swipeBound === '1') return;
+    stage.dataset.swipeBound = '1';
+    stage.addEventListener('touchstart', (e) => {
+        const t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]);
+        if (t) galleryLightboxTouchStartX = t.clientX;
+    }, { passive: true });
+    stage.addEventListener('touchend', (e) => {
+        if (!e.changedTouches || !e.changedTouches[0]) return;
+        const dx = e.changedTouches[0].clientX - galleryLightboxTouchStartX;
+        if (Math.abs(dx) < 48) return;
+        if (dx > 0) lightboxPrev();
+        else lightboxNext();
+    }, { passive: true });
 }
 
 function fileToDataUrlOnce(file) {
