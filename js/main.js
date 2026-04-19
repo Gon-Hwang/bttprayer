@@ -2334,7 +2334,8 @@ async function loadGalleryPosts(silent = false) {
         const response = await fetchWithRetry(`tables/gallery_posts?limit=1000&sort=-created_at&_=${ts}`);
         const data = await response.json();
         const remotePosts = (data.data || []).map((p) => {
-            const n = Number(p.likes ?? p.likeCount ?? 0);
+            // 간증(testimonies)과 동일: 서버 기준 필드는 likeCount 우선
+            const n = Number(p.likeCount ?? p.likes ?? 0);
             return { ...p, likes: n, likeCount: n };
         });
         // 로컬 임시글을 앞에 두면 같은 id가 원격과 중복될 때 find()가 좋아요 0인 로컬을 먼저 잡는다.
@@ -2389,7 +2390,7 @@ function findGalleryPostById(postId) {
     const nonLocal = matches.filter((p) => !p.localOnly);
     const pool = nonLocal.length ? nonLocal : matches;
     return pool.reduce((best, p) =>
-        (Number(p.likes ?? p.likeCount ?? 0) >= Number(best.likes ?? best.likeCount ?? 0) ? p : best)
+        (Number(p.likeCount ?? p.likes ?? 0) >= Number(best.likeCount ?? best.likes ?? 0) ? p : best)
     );
 }
 
@@ -2718,7 +2719,7 @@ function renderGalleryPosts() {
         const isProcessing = galleryLikeInFlight.has(post.id);
         const likeBtnClass = `action-button like-btn gallery-like-btn${hasLiked ? ' liked' : ''}`;
         const heartIcon = hasLiked ? 'fas fa-heart' : 'far fa-heart';
-        const likeCount = Number(post.likes ?? post.likeCount ?? 0);
+        const likeCount = Number(post.likeCount || post.likes || 0);
         const likeCountLabel = escapeHtml(`${likeCount} ${t.gallery_like_count_suffix}`);
 
         const galleryImagesPayload = encodeURIComponent(JSON.stringify(imageUrls));
@@ -2778,12 +2779,12 @@ async function likeGalleryPost(postId) {
     try {
         const likedItems = getUserActionList('likedGalleryPostsByUser', currentUserKey);
         const hasLiked = likedItems.includes(postId);
-        const currentCount = Number(targetPost.likes ?? targetPost.likeCount ?? 0);
+        const currentCount = Number(targetPost.likeCount ?? targetPost.likes ?? 0);
         const newCount = hasLiked ? Math.max(0, currentCount - 1) : currentCount + 1;
 
         if (targetPost.localOnly) {
-            targetPost.likes = newCount;
             targetPost.likeCount = newCount;
+            targetPost.likes = newCount;
             const nextLikedItems = hasLiked
                 ? likedItems.filter((itemId) => itemId !== postId)
                 : [...likedItems, postId];
@@ -2802,8 +2803,8 @@ async function likeGalleryPost(postId) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            // likes와 likeCount 양쪽 모두 전송 — DB 컬럼명에 무관하게 업데이트됨
-            body: JSON.stringify({ likes: newCount, likeCount: newCount })
+            // 간증(likeTestimony)과 동일하게 likeCount만 전송. 응답 본문은 base64 이미지로 매우 커서 파싱하지 않음.
+            body: JSON.stringify({ likeCount: newCount })
         });
 
         if (!response.ok) {
@@ -2812,20 +2813,12 @@ async function likeGalleryPost(postId) {
             throw new Error(`좋아요 업데이트 실패 (${response.status})${errorBody ? `: ${errorBody}` : ''}`);
         }
 
-        // 서버 응답에서 실제 저장된 값을 읽어 메모리 갱신
-        let savedCount = newCount;
-        try {
-            const updatedRecord = await response.json();
-            savedCount = Number(updatedRecord.likes ?? updatedRecord.likeCount ?? newCount);
-        } catch (_) {}
-        targetPost.likes = savedCount;
-        targetPost.likeCount = savedCount;
-
         const nextLikedItems = hasLiked
             ? likedItems.filter((itemId) => itemId !== postId)
             : [...likedItems, postId];
         saveUserActionList('likedGalleryPostsByUser', currentUserKey, nextLikedItems);
-        renderGalleryPosts();
+        // 간증과 동일: 서버 기준으로 목록 재로드 (성공 응답 JSON 파싱 생략)
+        await loadGalleryPosts(true);
     } catch (error) {
         console.error('갤러리 좋아요 오류:', error);
         showToast(translations[currentLanguage].gallery_like_error);
