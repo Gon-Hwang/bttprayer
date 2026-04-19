@@ -36,6 +36,14 @@ async function ensureGalleryLikeCounts(DB) {
   } catch (_) {}
 }
 
+// gp.* 에 포함된 구 likes 컬럼(0으로 남는 경우가 많음)이 JOIN 결과와 키가 겹치면
+// D1/JSON에서 잘못된 값이 선택될 수 있어, 물리 컬럼 likes/likeCount 는 제외한다.
+async function galleryPostsSelectColumnList(DB) {
+  const colInfo = await DB.prepare(`PRAGMA table_info(gallery_posts)`).all();
+  const names = (colInfo.results || []).map((c) => c.name);
+  return names.filter((n) => n !== 'likes' && n !== 'likeCount');
+}
+
 export async function onRequest(context) {
   const { request, params, env } = context;
   const table = params.table;
@@ -85,11 +93,20 @@ export async function onRequest(context) {
         const countResult = await DB.prepare(`SELECT COUNT(*) as total FROM gallery_posts`).first();
         const total = countResult ? countResult.total : 0;
 
+        const gpCols = await galleryPostsSelectColumnList(DB);
+        const gpSelectList = gpCols.map((c) => `gp.${c}`).join(', ');
+        let orderExpr = `gp.${orderByCol}`;
+        if (orderByCol === 'likes' || orderByCol === 'likeCount') {
+          orderExpr = 'COALESCE(glc.count, 0)';
+        }
+
         const rows = await DB.prepare(
-          `SELECT gp.*, COALESCE(glc.count, 0) as likes, COALESCE(glc.count, 0) as likeCount
+          `SELECT ${gpSelectList},
+            COALESCE(glc.count, 0) AS likes,
+            COALESCE(glc.count, 0) AS likeCount
            FROM gallery_posts gp
            LEFT JOIN gallery_like_counts glc ON gp.id = glc.post_id
-           ORDER BY gp.${orderByCol} ${orderByDir} LIMIT ? OFFSET ?`
+           ORDER BY ${orderExpr} ${orderByDir} LIMIT ? OFFSET ?`
         ).bind(limit, offset).all();
 
         return corsResponse(JSON.stringify({

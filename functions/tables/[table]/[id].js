@@ -25,6 +25,12 @@ async function ensureGalleryLikeCounts(DB) {
   ).run();
 }
 
+async function galleryPostsSelectColumnList(DB) {
+  const colInfo = await DB.prepare(`PRAGMA table_info(gallery_posts)`).all();
+  const names = (colInfo.results || []).map((c) => c.name);
+  return names.filter((n) => n !== 'likes' && n !== 'likeCount');
+}
+
 export async function onRequest(context) {
   const { request, params, env } = context;
   const table = params.table;
@@ -51,8 +57,12 @@ export async function onRequest(context) {
     if (method === 'GET') {
       if (table === 'gallery_posts') {
         await ensureGalleryLikeCounts(DB);
+        const gpCols = await galleryPostsSelectColumnList(DB);
+        const gpSelectList = gpCols.map((c) => `gp.${c}`).join(', ');
         const row = await DB.prepare(
-          `SELECT gp.*, COALESCE(glc.count, 0) as likes, COALESCE(glc.count, 0) as likeCount
+          `SELECT ${gpSelectList},
+            COALESCE(glc.count, 0) AS likes,
+            COALESCE(glc.count, 0) AS likeCount
            FROM gallery_posts gp
            LEFT JOIN gallery_like_counts glc ON gp.id = glc.post_id
            WHERE gp.id = ?`
@@ -82,8 +92,12 @@ export async function onRequest(context) {
         ).bind(id, newCount).run();
 
         // 업데이트된 포스트와 좋아요 수를 함께 반환
+        const gpCols = await galleryPostsSelectColumnList(DB);
+        const gpSelectList = gpCols.map((c) => `gp.${c}`).join(', ');
         const updated = await DB.prepare(
-          `SELECT gp.*, COALESCE(glc.count, 0) as likes, COALESCE(glc.count, 0) as likeCount
+          `SELECT ${gpSelectList},
+            COALESCE(glc.count, 0) AS likes,
+            COALESCE(glc.count, 0) AS likeCount
            FROM gallery_posts gp
            LEFT JOIN gallery_like_counts glc ON gp.id = glc.post_id
            WHERE gp.id = ?`
@@ -119,8 +133,12 @@ export async function onRequest(context) {
 
       if (table === 'gallery_posts') {
         await ensureGalleryLikeCounts(DB);
+        const gpCols = await galleryPostsSelectColumnList(DB);
+        const gpSelectList = gpCols.map((c) => `gp.${c}`).join(', ');
         const updated = await DB.prepare(
-          `SELECT gp.*, COALESCE(glc.count, 0) as likes, COALESCE(glc.count, 0) as likeCount
+          `SELECT ${gpSelectList},
+            COALESCE(glc.count, 0) AS likes,
+            COALESCE(glc.count, 0) AS likeCount
            FROM gallery_posts gp
            LEFT JOIN gallery_like_counts glc ON gp.id = glc.post_id
            WHERE gp.id = ?`
