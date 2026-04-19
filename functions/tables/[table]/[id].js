@@ -5,7 +5,7 @@ import {
   persistGalleryLikeCount,
   normalizeGalleryPostRow,
   ensureGalleryLikeCountsTable,
-} from '../../../_utils/galleryLike.js';
+} from '../../_utils/galleryLike.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
