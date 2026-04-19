@@ -119,52 +119,153 @@ function saveUserActionList(storageKey, userKey, list) {
     localStorage.setItem(storageKey, JSON.stringify(all));
 }
 
+function containsHangul(str) {
+    return /[\uac00-\ud7a3]/.test(String(str || ''));
+}
+
+/** URL 길이 제한을 피하기 위해 긴 문장을 나눔 */
+function chunkTextForTranslation(text, maxLen) {
+    const s = String(text);
+    if (s.length <= maxLen) return [s];
+    const parts = [];
+    const paras = s.split(/\n{2,}/);
+    let buf = '';
+    const flush = () => {
+        if (buf.trim()) parts.push(buf.trim());
+        buf = '';
+    };
+    for (const p of paras) {
+        if ((buf ? buf + '\n\n' + p : p).length <= maxLen) {
+            buf = buf ? buf + '\n\n' + p : p;
+        } else {
+            flush();
+            if (p.length <= maxLen) buf = p;
+            else {
+                for (let i = 0; i < p.length; i += maxLen) {
+                    parts.push(p.slice(i, i + maxLen));
+                }
+            }
+        }
+    }
+    flush();
+    return parts.length ? parts : [s.slice(0, maxLen)];
+}
+
 // 실시간 자동 번역 함수 (MyMemory Translation API 사용)
 async function translateText(text, targetLang) {
     if (!text || targetLang === 'ko') return text;
-    
-    // 캐시 확인
+    if (!containsHangul(text)) return text;
+
     const cacheKey = `${text}_${targetLang}`;
     if (translationCache[cacheKey]) {
         return translationCache[cacheKey];
     }
-    
+
+    const chunks = chunkTextForTranslation(text, 420);
     try {
-        // MyMemory Translation API (무료, 제한: 하루 1000회)
-        const response = await fetch(
-            `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=ko|${targetLang}`
+        const outParts = await Promise.all(
+            chunks.map(async (chunk) => {
+                const ck = `${chunk}_${targetLang}`;
+                if (translationCache[ck]) return translationCache[ck];
+                const response = await fetch(
+                    `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=ko|${targetLang}`
+                );
+                if (!response.ok) {
+                    throw new Error('Translation API error');
+                }
+                const data = await response.json();
+                if (data.responseStatus === 200 && data.responseData) {
+                    const translated = data.responseData.translatedText;
+                    translationCache[ck] = translated;
+                    return translated;
+                }
+                return chunk;
+            })
         );
-        
-        if (!response.ok) {
-            throw new Error('Translation API error');
-        }
-        
-        const data = await response.json();
-        
-        if (data.responseStatus === 200 && data.responseData) {
-            const translated = data.responseData.translatedText;
-            translationCache[cacheKey] = translated;
-            return translated;
-        }
-        
-        // 번역 실패 시 원본 반환
-        return text;
-        
+        const sep = text.includes('\n\n') ? '\n\n' : '\n';
+        const merged = outParts.join(chunks.length > 1 ? sep : '');
+        translationCache[cacheKey] = merged;
+        return merged;
     } catch (error) {
         console.warn('[번역 오류]', error);
-        // 오류 발생 시 원본 텍스트 반환
         return text;
     }
 }
 
 // 실제 사용 가능한 번역 함수
 async function getTranslatedContent(koreanText, targetLang) {
-    if (targetLang === 'ko' || !koreanText) {
+    if (targetLang === 'ko' || koreanText == null || koreanText === '') {
         return koreanText;
     }
-    
-    // 영어 모드일 때 실시간 번역
-    return await translateText(koreanText, 'en');
+    return await translateText(String(koreanText), 'en');
+}
+
+let loginRegisterKoHtmlSaved = false;
+function ensureLoginRegisterKoHtmlCaches() {
+    if (loginRegisterKoHtmlSaved) return;
+    const li = document.querySelector('.login-intro');
+    const ri = document.querySelector('.register-intro');
+    if (li && !li.getAttribute('data-i18n-ko-html')) li.setAttribute('data-i18n-ko-html', li.innerHTML);
+    if (ri && !ri.getAttribute('data-i18n-ko-html')) ri.setAttribute('data-i18n-ko-html', ri.innerHTML);
+    document.querySelectorAll('.login-form-container, .register-form-container').forEach((el) => {
+        if (!el.getAttribute('data-i18n-ko-html')) el.setAttribute('data-i18n-ko-html', el.innerHTML);
+    });
+    loginRegisterKoHtmlSaved = true;
+}
+
+function restoreLoginRegisterSectionsFromKo() {
+    document
+        .querySelectorAll('.login-intro, .register-intro, .login-form-container, .register-form-container')
+        .forEach((el) => {
+            const h = el.getAttribute('data-i18n-ko-html');
+            if (h) el.innerHTML = h;
+        });
+}
+
+async function translateTextNodesInElement(el) {
+    if (!el) return;
+    const textNodes = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    let n;
+    while ((n = walker.nextNode())) {
+        textNodes.push(n);
+    }
+    for (const tn of textNodes) {
+        const raw = tn.textContent;
+        if (!raw || !containsHangul(raw)) continue;
+        tn.textContent = await getTranslatedContent(raw, 'en');
+    }
+}
+
+/** 로그인·회원가입 안내: 링크·강조 유지하며 텍스트 노드만 번역 */
+async function translateLoginRegisterIntroBlocks() {
+    ensureLoginRegisterKoHtmlCaches();
+    const introEls = document.querySelectorAll(
+        '.login-intro p, .login-intro li, .register-intro p, .register-intro li, .login-intro h3, .register-intro h3'
+    );
+    for (const el of introEls) {
+        await translateTextNodesInElement(el);
+    }
+}
+
+async function translateLoginRegisterFormBlocks() {
+    ensureLoginRegisterKoHtmlCaches();
+    const boxes = document.querySelectorAll('.login-form-container, .register-form-container');
+    for (const box of boxes) {
+        const staticEls = box.querySelectorAll(
+            'h3, label, .login-footer p, .register-footer p, .radio-group .radio-label span'
+        );
+        for (const el of staticEls) {
+            await translateTextNodesInElement(el);
+        }
+        const inputs = box.querySelectorAll('input[placeholder], textarea[placeholder]');
+        for (const inp of inputs) {
+            const ph = inp.getAttribute('placeholder');
+            if (!ph || !containsHangul(ph)) continue;
+            if (!inp.dataset.koPlaceholder) inp.dataset.koPlaceholder = ph;
+            inp.setAttribute('placeholder', await getTranslatedContent(inp.dataset.koPlaceholder, 'en'));
+        }
+    }
 }
 
 // 비밀번호 해싱 함수 (SHA-256 사용)
@@ -430,6 +531,19 @@ const translations = {
         welcome: '환영합니다',
         loading: '불러오는 중...',
         anonymous: '익명',
+
+        members_login_required: '로그인 후 회원 목록을 확인할 수 있습니다.',
+        members_empty: '아직 등록된 회원이 없습니다.',
+        members_load_error: '회원 목록을 불러오는 중 오류가 발생했습니다.',
+        members_protected: '(보호됨)',
+        members_no_email: '미입력',
+        members_badge_leader: '🙏 기도인도자',
+        members_badge_admin: '👑 관리자',
+        members_delete: '삭제',
+
+        prayers_load_error: '기도 제목을 불러오는 중 오류가 발생했습니다.',
+        testimonies_load_error: '간증을 불러오는 중 오류가 발생했습니다.',
+        notices_load_error: '공지사항을 불러오는 중 오류가 발생했습니다.',
         
         // 푸터
         footer_verse: '"쉬지 말고 기도하라" - 데살로니가전서 5:17',
@@ -632,6 +746,19 @@ const translations = {
         welcome: 'Welcome',
         loading: 'Loading...',
         anonymous: 'Anonymous',
+
+        members_login_required: 'Please log in to view the member list.',
+        members_empty: 'No members registered yet.',
+        members_load_error: 'Could not load the member list.',
+        members_protected: '(protected)',
+        members_no_email: 'Not provided',
+        members_badge_leader: '🙏 Prayer leader',
+        members_badge_admin: '👑 Admin',
+        members_delete: 'Delete',
+
+        prayers_load_error: 'Could not load prayer requests.',
+        testimonies_load_error: 'Could not load testimonies.',
+        notices_load_error: 'Could not load notices.',
         
         // Footer
         footer_verse: '"Pray without ceasing." - 1 Thessalonians 5:17',
@@ -789,6 +916,29 @@ function isAnonymousName(name) {
     return /^(익명|anonymous)$/i.test(normalizeName(name));
 }
 
+/** 기도·간증·갤러리 카드에 보이는 작성자명 (영어 모드에서 한글 닉네임 등 번역) */
+async function translateAuthorDisplayName(rawName, isAnonymous, anonymousLabel) {
+    if (isAnonymous || isAnonymousName(rawName)) {
+        return escapeHtml(anonymousLabel);
+    }
+    const n = normalizeName(rawName);
+    if (!n) return escapeHtml(anonymousLabel);
+    if (currentLanguage !== 'en' || !containsHangul(n)) {
+        return escapeHtml(n);
+    }
+    return escapeHtml(await getTranslatedContent(n, 'en'));
+}
+
+/** 회원 교회명 등 단일 줄 한글 필드 */
+async function translateHangulPlainText(value) {
+    const s = String(value ?? '').trim();
+    if (!s) return '';
+    if (currentLanguage !== 'en' || !containsHangul(s)) {
+        return escapeHtml(s);
+    }
+    return escapeHtml(await getTranslatedContent(s, 'en'));
+}
+
 function getInstallPathMessage() {
     const isMobile = /android|iphone|ipad|ipod/i.test(window.navigator.userAgent);
     const t = translations[currentLanguage];
@@ -849,14 +999,14 @@ function loadLanguagePreference() {
     const savedLang = localStorage.getItem('preferredLanguage') || 'ko';
     currentLanguage = savedLang;
     document.body.setAttribute('data-lang', savedLang); // body에 언어 속성 추가
-    applyLanguage(savedLang);
+    void applyLanguage(savedLang).catch((e) => console.warn('[applyLanguage]', e));
 }
 
 // 언어 전환 함수
 function switchLanguage(lang) {
     currentLanguage = lang;
     localStorage.setItem('preferredLanguage', lang);
-    applyLanguage(lang);
+    void applyLanguage(lang).catch((e) => console.warn('[applyLanguage]', e));
     
     // body에 언어 속성 추가 (CSS에서 활용)
     document.body.setAttribute('data-lang', lang);
@@ -873,7 +1023,7 @@ function switchLanguage(lang) {
 }
 
 // 언어 적용 함수
-function applyLanguage(lang) {
+async function applyLanguage(lang) {
     const t = translations[lang];
     
     // 로고
@@ -1016,6 +1166,10 @@ function applyLanguage(lang) {
         footerVerses[1].textContent = t.footer_copyright;
     }
     
+    if (lang === 'ko') {
+        restoreLoginRegisterSectionsFromKo();
+    }
+
     // 일정을 다시 렌더링하여 번역 적용
     if (currentSchedule) {
         displaySchedule(currentSchedule);
@@ -1023,12 +1177,21 @@ function applyLanguage(lang) {
     
     // 데이터를 다시 렌더링하여 번역 적용
     if (currentUser) {
-        renderPrayers();
-        renderTestimonies();
-        renderGalleryPosts();
-        renderNotices();
-        renderMembers();
+        await Promise.all([
+            renderPrayers(),
+            renderTestimonies(),
+            renderGalleryPosts(),
+            renderNotices(),
+            renderMembers(),
+        ]);
     }
+
+    if (lang === 'en') {
+        ensureLoginRegisterKoHtmlCaches();
+        await translateLoginRegisterIntroBlocks();
+        await translateLoginRegisterFormBlocks();
+    }
+
     if (selectedGalleryUploadFiles.length) {
         renderGalleryMultiPreview(selectedGalleryUploadFiles);
     }
@@ -1717,19 +1880,21 @@ async function loadMembers() {
         const data = await response.json();
         console.log('[API] 회원 목록 데이터:', data);
         currentMembers = data.data || [];
-        renderMembers();
+        await renderMembers();
     } catch (error) {
         console.error('[ERROR] 회원 목록을 불러오는 중 오류 발생:', error);
         const memberList = document.getElementById('memberList');
+        const tm = translations[currentLanguage];
         if (memberList) {
-            memberList.innerHTML = `<div class="loading">❌ 회원 목록을 불러오는 중 오류가 발생했습니다.<br><small>오류: ${error.message}</small></div>`;
+            memberList.innerHTML = `<div class="loading">❌ ${escapeHtml(tm.members_load_error)}<br><small>${escapeHtml(String(error.message || error))}</small></div>`;
         }
     }
 }
 
 // 회원 렌더링
-function renderMembers() {
+async function renderMembers() {
     const memberList = document.getElementById('memberList');
+    const t = translations[currentLanguage];
     
     console.log('[MEMBERS] renderMembers 호출됨');
     console.log('[MEMBERS] currentUser:', currentUser);
@@ -1743,7 +1908,7 @@ function renderMembers() {
     // 로그인 확인
     if (!currentUser) {
         console.log('[MEMBERS] 로그인되지 않음');
-        memberList.innerHTML = '<div class="loading">로그인 후 회원 목록을 확인할 수 있습니다.</div>';
+        memberList.innerHTML = `<div class="loading">${escapeHtml(t.members_login_required)}</div>`;
         const memberListSection = document.querySelector('.member-list-section');
         if (memberListSection) memberListSection.style.display = 'none';
         return;
@@ -1762,50 +1927,46 @@ function renderMembers() {
     
     if (currentMembers.length === 0) {
         console.log('[MEMBERS] 회원 데이터 없음');
-        memberList.innerHTML = '<div class="loading">아직 등록된 회원이 없습니다.</div>';
+        memberList.innerHTML = `<div class="loading">${escapeHtml(t.members_empty)}</div>`;
         return;
     }
     
     console.log('[MEMBERS] 회원 목록 렌더링 시작');
     
-    memberList.innerHTML = currentMembers.map(member => {
-        // 관리자 여부 확인
-        const isMemberAdmin = isUserAdmin(member);
-        
-        // 이메일과 전화번호 표시 규칙
-        // 1. 현재 사용자가 관리자면 모든 정보 표시
-        // 2. 회원이 관리자면 모든 사람에게 공개
-        // 3. 일반 회원의 정보는 일반 사용자에게 마스킹
-        const shouldShowFullInfo = isAdmin || isMemberAdmin;
-        const displayPhone = shouldShowFullInfo ? escapeHtml(member.phone) : '***-****-****';
-        const displayEmail = shouldShowFullInfo ? escapeHtml(member.email || '미입력') : '***@*****.***';
-        
-        return `
+    const cards = await Promise.all(
+        currentMembers.map(async (member) => {
+            const isMemberAdmin = isUserAdmin(member);
+            const shouldShowFullInfo = isAdmin || isMemberAdmin;
+            const displayPhone = shouldShowFullInfo ? escapeHtml(member.phone) : '***-****-****';
+            const displayEmail = shouldShowFullInfo ? escapeHtml(member.email || t.members_no_email) : '***@*****.***';
+            const churchDisplay = await translateHangulPlainText(member.church);
+
+            return `
         <div class="member-card fade-in-up ${isMemberAdmin ? 'admin-member' : ''}" data-id="${member.id}">
             <div class="member-card-header">
                 <div class="member-name">
                     <div class="member-name-text">${escapeHtml(member.name)}</div>
-                    ${isMemberAdmin ? '<div class="member-role-row"><span class="inline-badge">🙏 기도인도자</span><span class="inline-badge">👑 관리자</span></div>' : ''}
+                    ${isMemberAdmin ? `<div class="member-role-row"><span class="inline-badge">${escapeHtml(t.members_badge_leader)}</span><span class="inline-badge">${escapeHtml(t.members_badge_admin)}</span></div>` : ''}
                 </div>
             </div>
             <div class="member-info">
                 <div class="member-info-item">
                     <i class="fas fa-venus-mars"></i>
-                    <span>${member.gender === 'male' ? '남성' : '여성'}</span>
+                    <span>${member.gender === 'male' ? t.register_male : t.register_female}</span>
                 </div>
                 <div class="member-info-item">
                     <i class="fas fa-phone"></i>
                     <span>${displayPhone}</span>
-                    ${!shouldShowFullInfo ? '<small style="color: #999; margin-left: 0.5rem;">(보호됨)</small>' : ''}
+                    ${!shouldShowFullInfo ? `<small style="color: #999; margin-left: 0.5rem;">${escapeHtml(t.members_protected)}</small>` : ''}
                 </div>
                 <div class="member-info-item">
                     <i class="fas fa-envelope"></i>
                     <span>${displayEmail}</span>
-                    ${!shouldShowFullInfo ? '<small style="color: #999; margin-left: 0.5rem;">(보호됨)</small>' : ''}
+                    ${!shouldShowFullInfo ? `<small style="color: #999; margin-left: 0.5rem;">${escapeHtml(t.members_protected)}</small>` : ''}
                 </div>
                 <div class="member-info-item">
                     <i class="fas fa-church"></i>
-                    <span>${escapeHtml(member.church)}</span>
+                    <span>${churchDisplay}</span>
                 </div>
                 <div class="member-info-item">
                     <i class="fas fa-calendar"></i>
@@ -1815,12 +1976,15 @@ function renderMembers() {
             ${isAdmin ? `
             <div class="member-actions">
                 <button class="action-button delete" onclick="deleteMember('${member.id}')">
-                    <i class="fas fa-trash"></i> 삭제
+                    <i class="fas fa-trash"></i> ${escapeHtml(t.members_delete)}
                 </button>
             </div>
             ` : ''}
         </div>
-    `;}).join('');
+    `;
+        })
+    );
+    memberList.innerHTML = cards.join('');
     
     console.log('[MEMBERS] 회원 목록 렌더링 완료:', currentMembers.length, '명');
 }
@@ -1932,11 +2096,12 @@ async function loadPrayers() {
         const data = await response.json();
         console.log('[API] 기도 제목 데이터:', data);
         currentPrayers = data.data || [];
-        renderPrayers();
+        await renderPrayers();
     } catch (error) {
         console.error('[ERROR] 기도 제목을 불러오는 중 오류 발생:', error);
-        document.getElementById('prayerList').innerHTML = 
-            `<div class="loading">❌ 기도 제목을 불러오는 중 오류가 발생했습니다.<br><small>오류: ${error.message}</small></div>`;
+        const te = translations[currentLanguage];
+        document.getElementById('prayerList').innerHTML =
+            `<div class="loading">❌ ${escapeHtml(te.prayers_load_error)}<br><small>${escapeHtml(String(error.message || error))}</small></div>`;
     }
 }
 
@@ -1944,6 +2109,7 @@ async function loadPrayers() {
 async function renderPrayers() {
     const prayerList = document.getElementById('prayerList');
     const t = translations[currentLanguage];
+    if (!prayerList) return;
 
     currentPrayers.sort((a, b) => new Date(b.created_at || b.date || 0).getTime() - new Date(a.created_at || a.date || 0).getTime());
 
@@ -1971,8 +2137,9 @@ async function renderPrayers() {
         const prayersCountText = currentLanguage === 'ko' ? `${prayer.prayerCount || 0}명 기도` : `${prayer.prayerCount || 0} ${t.prayers_count}`;
         
         // 제목과 내용 번역
-        const displayTitle = await getTranslatedContent(prayer.title, currentLanguage);
-        const displayContent = await getTranslatedContent(prayer.content, currentLanguage);
+        const displayTitle = await getTranslatedContent(prayer.title ?? '', currentLanguage);
+        const displayContent = await getTranslatedContent(prayer.content ?? '', currentLanguage);
+        const authorLine = await translateAuthorDisplayName(prayer.name, prayer.isAnonymous, anonymousText);
         
         return `
         <div class="prayer-item fade-in-up" data-id="${prayer.id}">
@@ -1980,7 +2147,7 @@ async function renderPrayers() {
                 <div>
                     <h3 class="item-title">${escapeHtml(displayTitle)}</h3>
                     <div class="item-meta">
-                        <span><i class="fas fa-user"></i> ${prayer.isAnonymous ? anonymousText : escapeHtml(prayer.name || anonymousText)}</span>
+                        <span><i class="fas fa-user"></i> ${authorLine}</span>
                         <span><i class="fas fa-calendar"></i> ${formatDate(prayer.created_at)}</span>
                     </div>
                 </div>
@@ -2148,11 +2315,12 @@ async function loadTestimonies() {
         const data = await response.json();
         console.log('[API] 간증 데이터:', data);
         currentTestimonies = data.data || [];
-        renderTestimonies();
+        await renderTestimonies();
     } catch (error) {
         console.error('[ERROR] 간증을 불러오는 중 오류 발생:', error);
-        document.getElementById('testimonyList').innerHTML = 
-            `<div class="loading">❌ 간증을 불러오는 중 오류가 발생했습니다.<br><small>오류: ${error.message}</small></div>`;
+        const te = translations[currentLanguage];
+        document.getElementById('testimonyList').innerHTML =
+            `<div class="loading">❌ ${escapeHtml(te.testimonies_load_error)}<br><small>${escapeHtml(String(error.message || error))}</small></div>`;
     }
 }
 
@@ -2160,6 +2328,7 @@ async function loadTestimonies() {
 async function renderTestimonies() {
     const testimonyList = document.getElementById('testimonyList');
     const t = translations[currentLanguage];
+    if (!testimonyList) return;
 
     currentTestimonies.sort((a, b) => new Date(b.created_at || b.date || 0).getTime() - new Date(a.created_at || a.date || 0).getTime());
 
@@ -2187,8 +2356,9 @@ async function renderTestimonies() {
         const likeCountLabel = escapeHtml(`${Number(testimony.likeCount || 0)} ${t.testimonies_like_count_suffix}`);
         
         // 제목과 내용 번역
-        const displayTitle = await getTranslatedContent(testimony.title, currentLanguage);
-        const displayContent = await getTranslatedContent(testimony.content, currentLanguage);
+        const displayTitle = await getTranslatedContent(testimony.title ?? '', currentLanguage);
+        const displayContent = await getTranslatedContent(testimony.content ?? '', currentLanguage);
+        const authorLine = await translateAuthorDisplayName(testimony.name, testimony.isAnonymous, anonymousText);
         
         return `
         <div class="testimony-item fade-in-up" data-id="${testimony.id}">
@@ -2196,7 +2366,7 @@ async function renderTestimonies() {
                 <div>
                     <h3 class="item-title">${escapeHtml(displayTitle)}</h3>
                     <div class="item-meta">
-                        <span><i class="fas fa-user"></i> ${testimony.isAnonymous ? anonymousText : escapeHtml(testimony.name || anonymousText)}</span>
+                        <span><i class="fas fa-user"></i> ${authorLine}</span>
                         <span><i class="fas fa-calendar"></i> ${formatDate(testimony.created_at)}</span>
                     </div>
                 </div>
@@ -2359,7 +2529,7 @@ async function loadGalleryPosts(silent = false) {
     if (!isGalleryRemoteAvailable) {
         currentGalleryPosts = getLocalGalleryPosts();
         galleryCommentsByPost = {};
-        renderGalleryPosts();
+        await renderGalleryPosts();
         return;
     }
 
@@ -2389,7 +2559,7 @@ async function loadGalleryPosts(silent = false) {
             });
         }
         await refreshGalleryCommentsCache();
-        renderGalleryPosts();
+        await renderGalleryPosts();
     } catch (error) {
         const errorMessage = String(error && error.message ? error.message : error);
         if (errorMessage.includes('no such table: gallery_posts')) {
@@ -2400,7 +2570,7 @@ async function loadGalleryPosts(silent = false) {
         }
         currentGalleryPosts = getLocalGalleryPosts();
         galleryCommentsByPost = {};
-        renderGalleryPosts();
+        await renderGalleryPosts();
     }
 }
 
@@ -2467,7 +2637,7 @@ async function refreshGalleryCommentsCache() {
     await Promise.all(remotePosts.map((p) => reloadGalleryCommentsForPost(p.id)));
 }
 
-function buildGalleryCommentsBlock(post) {
+async function buildGalleryCommentsBlock(post) {
     const t = translations[currentLanguage];
     const pid = String(post.id);
     const comments = Array.isArray(galleryCommentsByPost[pid]) ? galleryCommentsByPost[pid] : [];
@@ -2476,29 +2646,41 @@ function buildGalleryCommentsBlock(post) {
             ? `${t.gallery_comment_title} ${comments.length}${t.gallery_comment_count}`
             : `${comments.length} ${t.gallery_comment_title}`;
 
-    const listItems = comments
-        .map((c) => {
-            const name = escapeHtml(c.author_name || '');
-            const body = escapeHtml(String(c.content || '')).replace(/\n/g, '<br>');
-            const when = c.created_at ? formatDate(c.created_at) : '';
-            const showDel = canDeleteGalleryComment(c);
-            const delBtn = showDel
-                ? `<button type="button" class="gallery-comment-delete" data-comment-id="${escapeHtml(String(c.id))}" data-post-id="${escapeHtml(pid)}" title="${escapeHtml(t.gallery_comment_delete)}"><i class="fas fa-trash-alt"></i></button>`
-                : '';
-            return `
+    const listItems = (
+        await Promise.all(
+            comments.map(async (c) => {
+                const nameRaw = String(c.author_name || '').trim();
+                let name = escapeHtml(nameRaw);
+                if (currentLanguage === 'en' && nameRaw && containsHangul(nameRaw)) {
+                    name = escapeHtml(await getTranslatedContent(nameRaw, 'en'));
+                }
+                const avatarLetter = nameRaw ? [...nameRaw][0] : '?';
+                const rawBody = String(c.content || '');
+                let bodyHtml = escapeHtml(rawBody).replace(/\n/g, '<br>');
+                if (currentLanguage === 'en' && containsHangul(rawBody)) {
+                    const tr = await getTranslatedContent(rawBody, 'en');
+                    bodyHtml = escapeHtml(tr).replace(/\n/g, '<br>');
+                }
+                const when = c.created_at ? formatDate(c.created_at) : '';
+                const showDel = canDeleteGalleryComment(c);
+                const delBtn = showDel
+                    ? `<button type="button" class="gallery-comment-delete" data-comment-id="${escapeHtml(String(c.id))}" data-post-id="${escapeHtml(pid)}" title="${escapeHtml(t.gallery_comment_delete)}"><i class="fas fa-trash-alt"></i></button>`
+                    : '';
+                return `
             <li class="gallery-comment-item">
-                <div class="gallery-comment-avatar" aria-hidden="true">${name.slice(0, 1) || '?'}</div>
+                <div class="gallery-comment-avatar" aria-hidden="true">${escapeHtml(avatarLetter)}</div>
                 <div class="gallery-comment-main">
                     <div class="gallery-comment-meta">
                         <span class="gallery-comment-author">${name}</span>
                         <span class="gallery-comment-time">${escapeHtml(when)}</span>
                         ${delBtn}
                     </div>
-                    <div class="gallery-comment-body">${body}</div>
+                    <div class="gallery-comment-body">${bodyHtml}</div>
                 </div>
             </li>`;
-        })
-        .join('');
+            })
+        )
+    ).join('');
 
     const listHtml = comments.length
         ? `<ul class="gallery-comments-list">${listItems}</ul>`
@@ -2571,7 +2753,7 @@ async function handleGalleryCommentFormSubmit(e) {
         }
         if (ta) ta.value = '';
         await reloadGalleryCommentsForPost(pid);
-        renderGalleryPosts();
+        await renderGalleryPosts();
         showToast(currentLanguage === 'ko' ? '댓글이 등록되었습니다.' : 'Comment posted.');
     } catch (err) {
         console.error('[GALLERY COMMENT]', err);
@@ -2598,7 +2780,7 @@ async function deleteGalleryComment(commentId, postId) {
         const res = await fetch(`tables/gallery_comments/${encodeURIComponent(commentId)}`, { method: 'DELETE' });
         if (!res.ok) throw new Error(String(res.status));
         await reloadGalleryCommentsForPost(postId);
-        renderGalleryPosts();
+        await renderGalleryPosts();
         showToast(t.gallery_comment_deleted);
     } catch (err) {
         console.error('[GALLERY COMMENT DELETE]', err);
@@ -2899,38 +3081,32 @@ async function adminDedupeGalleryPosts() {
     }
 }
 
-function renderGalleryPosts() {
-    const galleryList = document.getElementById('galleryList');
-    if (!galleryList) return;
-
-    const t = translations[currentLanguage];
-    const currentUserKey = getCurrentUserKey();
-    const likedItems = getUserActionList('likedGalleryPostsByUser', currentUserKey);
-    if (!currentGalleryPosts || currentGalleryPosts.length === 0) {
-        galleryList.innerHTML = `<div class="loading">${t.gallery_empty}</div>`;
-        return;
+async function renderGalleryPostCard(post, t, currentUserKey, likedItems) {
+    const imageUrls = parseGalleryImages(post.images);
+    const descRaw = String(post.description || '');
+    let safeDescription = escapeHtml(descRaw);
+    if (currentLanguage === 'en' && containsHangul(descRaw)) {
+        safeDescription = escapeHtml(await getTranslatedContent(descRaw, 'en'));
     }
+    const rawAuthor = post.authorName || post.name || '';
+    const author = await translateAuthorDisplayName(rawAuthor, false, t.anonymous);
+    const dateForCard = IS_PRODUCTION_HOST
+        ? (post.date || post.created_at || post.updated_at || new Date().toISOString())
+        : (post.created_at || post.date || new Date().toISOString());
+    const createdAt = formatDate(dateForCard);
+    const canDelete = canDeleteGalleryPost(post);
+    const canEdit = canEditGalleryPost(post);
+    const hasLiked = currentUserKey ? likedItems.includes(post.id) : false;
+    const isProcessing = galleryLikeInFlight.has(post.id);
+    const likeBtnClass = `action-button like-btn gallery-like-btn${hasLiked ? ' liked' : ''}`;
+    const heartIcon = hasLiked ? 'fas fa-heart' : 'far fa-heart';
+    const likeCount = Number(post.likeCount || post.likes || 0);
+    const likeCountLabel = escapeHtml(`${likeCount} ${t.gallery_like_count_suffix}`);
 
-    galleryList.innerHTML = currentGalleryPosts.map((post) => {
-        const imageUrls = parseGalleryImages(post.images);
-        const safeDescription = escapeHtml(post.description || '');
-        const author = escapeHtml(post.authorName || post.name || '익명');
-        const dateForCard = IS_PRODUCTION_HOST
-            ? (post.date || post.created_at || post.updated_at || new Date().toISOString())
-            : (post.created_at || post.date || new Date().toISOString());
-        const createdAt = formatDate(dateForCard);
-        const canDelete = canDeleteGalleryPost(post);
-        const canEdit = canEditGalleryPost(post);
-        const hasLiked = currentUserKey ? likedItems.includes(post.id) : false;
-        const isProcessing = galleryLikeInFlight.has(post.id);
-        const likeBtnClass = `action-button like-btn gallery-like-btn${hasLiked ? ' liked' : ''}`;
-        const heartIcon = hasLiked ? 'fas fa-heart' : 'far fa-heart';
-        const likeCount = Number(post.likeCount || post.likes || 0);
-        const likeCountLabel = escapeHtml(`${likeCount} ${t.gallery_like_count_suffix}`);
+    const galleryImagesPayload = encodeURIComponent(JSON.stringify(imageUrls));
+    const commentsBlock = await buildGalleryCommentsBlock(post);
 
-        const galleryImagesPayload = encodeURIComponent(JSON.stringify(imageUrls));
-
-        return `
+    return `
             <article class="gallery-item fade-in-up" data-gallery-images="${galleryImagesPayload}">
                 <div class="gallery-item-header">
                     <div class="gallery-author">
@@ -2947,7 +3123,7 @@ function renderGalleryPosts() {
                 <div class="gallery-images">
                     ${imageUrls.map((url, index) => `<div class="gallery-image-wrap"><img src="${url}" alt="gallery-photo-${index + 1}" loading="lazy" data-gallery-index="${index}" onclick="openGalleryLightbox(this)"></div>`).join('')}
                 </div>
-                ${buildGalleryCommentsBlock(post)}
+                ${commentsBlock}
                 <footer class="gallery-item-footer">
                     <div class="post-like-count"><i class="fas fa-heart"></i> <span>${likeCountLabel}</span></div>
                     <div class="item-actions gallery-item-actions">
@@ -2968,7 +3144,24 @@ function renderGalleryPosts() {
                 </footer>
             </article>
         `;
-    }).join('');
+}
+
+async function renderGalleryPosts() {
+    const galleryList = document.getElementById('galleryList');
+    if (!galleryList) return;
+
+    const t = translations[currentLanguage];
+    const currentUserKey = getCurrentUserKey();
+    const likedItems = getUserActionList('likedGalleryPostsByUser', currentUserKey);
+    if (!currentGalleryPosts || currentGalleryPosts.length === 0) {
+        galleryList.innerHTML = `<div class="loading">${t.gallery_empty}</div>`;
+        return;
+    }
+
+    const cards = await Promise.all(
+        currentGalleryPosts.map((post) => renderGalleryPostCard(post, t, currentUserKey, likedItems))
+    );
+    galleryList.innerHTML = cards.join('');
 }
 
 async function likeGalleryPost(postId) {
@@ -3000,7 +3193,7 @@ async function likeGalleryPost(postId) {
                 String(post.id) === String(postId) ? { ...post, likes: newCount, likeCount: newCount } : post
             ));
             saveLocalGalleryPosts(localPosts);
-            renderGalleryPosts();
+            await renderGalleryPosts();
             return;
         }
 
@@ -3054,7 +3247,7 @@ async function deleteGalleryPost(postId, isLocalOnly) {
 
     // 낙관적 즉시 제거: 서버 응답 전에 화면에서 먼저 삭제
     currentGalleryPosts = currentGalleryPosts.filter((p) => String(p.id) !== String(postId));
-    renderGalleryPosts();
+    await renderGalleryPosts();
 
     try {
         if (isLocalOnly) {
@@ -3112,7 +3305,7 @@ async function editGalleryPostDescription(postId, isLocalOnly) {
                 String(post.id) === String(postId) ? { ...post, description: trimmed } : post
             ));
             saveLocalGalleryPosts(localPosts);
-            renderGalleryPosts();
+            await renderGalleryPosts();
             showToast(t.gallery_edit_success);
             return;
         }
@@ -3133,7 +3326,7 @@ async function editGalleryPostDescription(postId, isLocalOnly) {
         }
 
         targetPost.description = trimmed;
-        renderGalleryPosts();
+        await renderGalleryPosts();
         showToast(t.gallery_edit_success);
     } catch (error) {
         console.error('갤러리 설명 수정 오류:', error);
@@ -3445,7 +3638,7 @@ async function handleGallerySubmit(e) {
             optimistic: true
         };
         currentGalleryPosts = [optimisticPost, ...currentGalleryPosts];
-        renderGalleryPosts();
+        await renderGalleryPosts();
 
         if (!isGalleryRemoteAvailable) {
             throw new Error('gallery_posts table unavailable');
@@ -3493,7 +3686,7 @@ async function handleGallerySubmit(e) {
                     }
                     : post
             ));
-            renderGalleryPosts();
+            await renderGalleryPosts();
         } else {
             // 서버 반영 지연 대비: UI 즉시 유지하고 약간 지연 후 동기화
             setTimeout(() => loadGalleryPosts(true), 1500);
@@ -3505,7 +3698,7 @@ async function handleGallerySubmit(e) {
     } catch (error) {
         if (optimisticId) {
             currentGalleryPosts = currentGalleryPosts.filter((post) => post.id !== optimisticId);
-            renderGalleryPosts();
+            await renderGalleryPosts();
         }
         const errorMessage = String(error && error.message ? error.message : error);
         const isTableMissing = errorMessage.includes('no such table: gallery_posts') || errorMessage.includes('gallery_posts table unavailable');
@@ -3565,11 +3758,12 @@ async function loadNotices() {
         const data = await response.json();
         console.log('[API] 공지사항 데이터:', data);
         currentNotices = data.data || [];
-        renderNotices();
+        await renderNotices();
     } catch (error) {
         console.error('[ERROR] 공지사항을 불러오는 중 오류 발생:', error);
-        document.getElementById('noticeList').innerHTML = 
-            `<div class="loading">❌ 공지사항을 불러오는 중 오류가 발생했습니다.<br><small>오류: ${error.message}</small></div>`;
+        const te = translations[currentLanguage];
+        document.getElementById('noticeList').innerHTML =
+            `<div class="loading">❌ ${escapeHtml(te.notices_load_error)}<br><small>${escapeHtml(String(error.message || error))}</small></div>`;
     }
 }
 
@@ -3577,6 +3771,7 @@ async function loadNotices() {
 async function renderNotices() {
     const noticeList = document.getElementById('noticeList');
     const t = translations[currentLanguage];
+    if (!noticeList) return;
 
     currentNotices.sort((a, b) => new Date(b.created_at || b.date || 0).getTime() - new Date(a.created_at || a.date || 0).getTime());
 
@@ -3596,8 +3791,8 @@ async function renderNotices() {
     // 각 공지사항을 번역하고 HTML 생성
     const translatedNotices = await Promise.all(currentNotices.map(async (notice) => {
         // 제목과 내용 번역
-        const displayTitle = await getTranslatedContent(notice.title, currentLanguage);
-        const displayContent = await getTranslatedContent(notice.content, currentLanguage);
+        const displayTitle = await getTranslatedContent(notice.title ?? '', currentLanguage);
+        const displayContent = await getTranslatedContent(notice.content ?? '', currentLanguage);
         
         return `
         <div class="notice-item fade-in-up" data-id="${notice.id}">
@@ -3817,7 +4012,7 @@ async function loadAdminData() {
     // 회원 목록 로드 (관리자 페이지용)
     const adminMemberList = document.getElementById('adminMemberList');
     if (adminMemberList) {
-        renderAdminMembers();
+        await renderAdminMembers();
     }
     
     // 통계 업데이트
@@ -3825,26 +4020,28 @@ async function loadAdminData() {
 }
 
 // 관리자 페이지 회원 목록 렌더링
-function renderAdminMembers() {
+async function renderAdminMembers() {
     const adminMemberList = document.getElementById('adminMemberList');
     if (!adminMemberList) return;
+    const t = translations[currentLanguage];
     
-    adminMemberList.innerHTML = currentMembers.map(member => {
-        // 관리자 여부 확인
-        const isMemberAdmin = isUserAdmin(member);
-        
-        return `
+    const cards = await Promise.all(
+        currentMembers.map(async (member) => {
+            const isMemberAdmin = isUserAdmin(member);
+            const churchDisplay = await translateHangulPlainText(member.church);
+
+            return `
         <div class="member-card fade-in-up ${isMemberAdmin ? 'admin-member' : ''}" data-id="${member.id}">
             <div class="member-card-header">
                 <div class="member-name">
                     <div class="member-name-text">${escapeHtml(member.name)}</div>
-                    ${isMemberAdmin ? '<div class="member-role-row"><span class="inline-badge">🙏 기도인도자</span><span class="inline-badge">👑 관리자</span></div>' : ''}
+                    ${isMemberAdmin ? `<div class="member-role-row"><span class="inline-badge">${escapeHtml(t.members_badge_leader)}</span><span class="inline-badge">${escapeHtml(t.members_badge_admin)}</span></div>` : ''}
                 </div>
             </div>
             <div class="member-info">
                 <div class="member-info-item">
                     <i class="fas fa-venus-mars"></i>
-                    <span>${member.gender === 'male' ? '남성' : '여성'}</span>
+                    <span>${member.gender === 'male' ? t.register_male : t.register_female}</span>
                 </div>
                 <div class="member-info-item">
                     <i class="fas fa-phone"></i>
@@ -3852,11 +4049,11 @@ function renderAdminMembers() {
                 </div>
                 <div class="member-info-item">
                     <i class="fas fa-envelope"></i>
-                    <span>${escapeHtml(member.email || '미입력')}</span>
+                    <span>${escapeHtml(member.email || t.members_no_email)}</span>
                 </div>
                 <div class="member-info-item">
                     <i class="fas fa-church"></i>
-                    <span>${escapeHtml(member.church)}</span>
+                    <span>${churchDisplay}</span>
                 </div>
                 <div class="member-info-item">
                     <i class="fas fa-calendar"></i>
@@ -3865,11 +4062,14 @@ function renderAdminMembers() {
             </div>
             <div class="member-actions">
                 <button class="action-button delete" onclick="deleteMember('${member.id}')">
-                    <i class="fas fa-trash"></i> 삭제
+                    <i class="fas fa-trash"></i> ${escapeHtml(t.members_delete)}
                 </button>
             </div>
         </div>
-    `;}).join('');
+    `;
+        })
+    );
+    adminMemberList.innerHTML = cards.join('');
 }
 
 // 관리자 통계 업데이트
