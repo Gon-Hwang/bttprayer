@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bttprayer-cache-v100';
+const CACHE_NAME = 'bttprayer-cache-v101';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

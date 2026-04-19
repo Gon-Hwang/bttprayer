@@ -2333,7 +2333,10 @@ async function loadGalleryPosts(silent = false) {
         const ts = Date.now();
         const response = await fetchWithRetry(`tables/gallery_posts?limit=1000&sort=-created_at&_=${ts}`);
         const data = await response.json();
-        const remotePosts = data.data || [];
+        const remotePosts = (data.data || []).map((p) => {
+            const n = Number(p.likes ?? p.likeCount ?? 0);
+            return { ...p, likes: n, likeCount: n };
+        });
         const localPosts = getLocalGalleryPosts();
         currentGalleryPosts = [...localPosts, ...remotePosts];
         // 운영 웹(bttprayer.net)에서만: API 순서와 무관하게 표시용 시각으로 최신순 고정
@@ -2764,12 +2767,13 @@ async function likeGalleryPost(postId) {
 
         if (targetPost.localOnly) {
             targetPost.likes = newCount;
+            targetPost.likeCount = newCount;
             const nextLikedItems = hasLiked
                 ? likedItems.filter((itemId) => itemId !== postId)
                 : [...likedItems, postId];
             saveUserActionList('likedGalleryPostsByUser', currentUserKey, nextLikedItems);
             const localPosts = getLocalGalleryPosts().map((post) => (
-                String(post.id) === String(postId) ? { ...post, likes: newCount } : post
+                String(post.id) === String(postId) ? { ...post, likes: newCount, likeCount: newCount } : post
             ));
             saveLocalGalleryPosts(localPosts);
             renderGalleryPosts();
@@ -2782,7 +2786,8 @@ async function likeGalleryPost(postId) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ likes: newCount })
+            // likes와 likeCount 양쪽 모두 전송 — DB 컬럼명에 무관하게 업데이트됨
+            body: JSON.stringify({ likes: newCount, likeCount: newCount })
         });
 
         if (!response.ok) {
@@ -2791,7 +2796,15 @@ async function likeGalleryPost(postId) {
             throw new Error(`좋아요 업데이트 실패 (${response.status})${errorBody ? `: ${errorBody}` : ''}`);
         }
 
-        targetPost.likes = newCount;
+        // 서버 응답에서 실제 저장된 값을 읽어 메모리 갱신
+        let savedCount = newCount;
+        try {
+            const updatedRecord = await response.json();
+            savedCount = Number(updatedRecord.likes ?? updatedRecord.likeCount ?? newCount);
+        } catch (_) {}
+        targetPost.likes = savedCount;
+        targetPost.likeCount = savedCount;
+
         const nextLikedItems = hasLiked
             ? likedItems.filter((itemId) => itemId !== postId)
             : [...likedItems, postId];
@@ -3203,6 +3216,7 @@ async function handleGallerySubmit(e) {
             authorEmail: currentUser.email || '',
             description: description,
             images: imageDataUrls,
+            likes: 0,
             likeCount: 0,
             date: new Date().toISOString(),
             optimistic: true
@@ -3250,7 +3264,8 @@ async function handleGallerySubmit(e) {
                         images: serverPost.images || imageDataUrls,
                         authorName: serverPost.authorName || currentUser.name || '익명',
                         authorEmail: serverPost.authorEmail || currentUser.email || '',
-                        likeCount: Number(serverPost.likeCount || 0),
+                        likes: Number(serverPost.likes ?? serverPost.likeCount ?? 0),
+                        likeCount: Number(serverPost.likes ?? serverPost.likeCount ?? 0),
                         description: serverPost.description || description
                     }
                     : post
@@ -3300,6 +3315,7 @@ async function handleGallerySubmit(e) {
             authorEmail: currentUser.email || '',
             description: description,
             images: imageDataUrls,
+            likes: 0,
             likeCount: 0,
             date: new Date().toISOString(),
             localOnly: true
