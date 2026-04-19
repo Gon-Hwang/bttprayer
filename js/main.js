@@ -2337,8 +2337,12 @@ async function loadGalleryPosts(silent = false) {
             const n = Number(p.likes ?? p.likeCount ?? 0);
             return { ...p, likes: n, likeCount: n };
         });
-        const localPosts = getLocalGalleryPosts();
-        currentGalleryPosts = [...localPosts, ...remotePosts];
+        // 로컬 임시글을 앞에 두면 같은 id가 원격과 중복될 때 find()가 좋아요 0인 로컬을 먼저 잡는다.
+        const remoteIds = new Set(remotePosts.map((p) => String(p.id)));
+        const localPending = getLocalGalleryPosts().filter(
+            (p) => p && p.id && !remoteIds.has(String(p.id)) && p.localOnly === true
+        );
+        currentGalleryPosts = [...remotePosts, ...localPending];
         // 운영 웹(bttprayer.net)에서만: API 순서와 무관하게 표시용 시각으로 최신순 고정
         if (IS_PRODUCTION_HOST) {
             sortGalleryPostsNewestFirst(currentGalleryPosts);
@@ -2375,6 +2379,18 @@ function getLocalGalleryPosts() {
 
 function saveLocalGalleryPosts(posts) {
     localStorage.setItem(GALLERY_LOCAL_STORAGE_KEY, JSON.stringify(posts));
+}
+
+/** 같은 id가 목록에 중복일 때(구버그·로컬 복제) 원격·높은 좋아요 쪽을 고른다. */
+function findGalleryPostById(postId) {
+    const matches = currentGalleryPosts.filter((post) => String(post.id) === String(postId));
+    if (matches.length === 0) return undefined;
+    if (matches.length === 1) return matches[0];
+    const nonLocal = matches.filter((p) => !p.localOnly);
+    const pool = nonLocal.length ? nonLocal : matches;
+    return pool.reduce((best, p) =>
+        (Number(p.likes ?? p.likeCount ?? 0) >= Number(best.likes ?? best.likeCount ?? 0) ? p : best)
+    );
 }
 
 function addLocalGalleryPost(post) {
@@ -2755,7 +2771,7 @@ async function likeGalleryPost(postId) {
         return;
     }
 
-    const targetPost = currentGalleryPosts.find((post) => String(post.id) === String(postId));
+    const targetPost = findGalleryPostById(postId);
     if (!targetPost) return;
 
     galleryLikeInFlight.add(postId);
@@ -2825,7 +2841,7 @@ function removeLocalGalleryPostById(id) {
 }
 
 async function deleteGalleryPost(postId, isLocalOnly) {
-    const targetPost = currentGalleryPosts.find((post) => String(post.id) === String(postId));
+    const targetPost = findGalleryPostById(postId);
     if (!targetPost) {
         showToast('이미 삭제되었거나 게시물을 찾을 수 없습니다.');
         return;
@@ -2871,7 +2887,7 @@ async function deleteGalleryPost(postId, isLocalOnly) {
 }
 
 async function editGalleryPostDescription(postId, isLocalOnly) {
-    const targetPost = currentGalleryPosts.find((post) => String(post.id) === String(postId));
+    const targetPost = findGalleryPostById(postId);
     if (!targetPost) {
         showToast('게시물을 찾을 수 없습니다.');
         return;
