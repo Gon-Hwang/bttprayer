@@ -1,6 +1,12 @@
 // Cloudflare Pages Function: /tables/:table/:id
 // Handles GET (single), PUT/PATCH (update), DELETE for D1 tables
 
+import {
+  persistGalleryLikeCount,
+  normalizeGalleryPostRow,
+  ensureGalleryLikeCountsTable,
+} from '../../../_utils/galleryLike.js';
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
@@ -13,22 +19,6 @@ function corsResponse(body, status = 200) {
     status,
     headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
   });
-}
-
-// gallery_like_counts 테이블 초기화
-async function ensureGalleryLikeCounts(DB) {
-  await DB.prepare(
-    `CREATE TABLE IF NOT EXISTS gallery_like_counts (
-      post_id TEXT PRIMARY KEY,
-      count INTEGER DEFAULT 0
-    )`
-  ).run();
-}
-
-async function galleryPostsSelectColumnList(DB) {
-  const colInfo = await DB.prepare(`PRAGMA table_info(gallery_posts)`).all();
-  const names = (colInfo.results || []).map((c) => c.name);
-  return names.filter((n) => n !== 'likes' && n !== 'likeCount');
 }
 
 export async function onRequest(context) {
@@ -56,19 +46,10 @@ export async function onRequest(context) {
   try {
     if (method === 'GET') {
       if (table === 'gallery_posts') {
-        await ensureGalleryLikeCounts(DB);
-        const gpCols = await galleryPostsSelectColumnList(DB);
-        const gpSelectList = gpCols.map((c) => `gp.${c}`).join(', ');
-        const row = await DB.prepare(
-          `SELECT ${gpSelectList},
-            COALESCE(glc.count, 0) AS likes,
-            COALESCE(glc.count, 0) AS likeCount
-           FROM gallery_posts gp
-           LEFT JOIN gallery_like_counts glc ON gp.id = glc.post_id
-           WHERE gp.id = ?`
-        ).bind(id).first();
+        await ensureGalleryLikeCountsTable(DB);
+        const row = await DB.prepare(`SELECT * FROM gallery_posts WHERE id = ?`).bind(id).first();
         if (!row) return corsResponse(JSON.stringify({ error: 'Record not found' }), 404);
-        return corsResponse(JSON.stringify(row));
+        return corsResponse(JSON.stringify(normalizeGalleryPostRow(row)));
       }
 
       const row = await DB.prepare(`SELECT * FROM ${table} WHERE id = ?`).bind(id).first();
@@ -81,28 +62,12 @@ export async function onRequest(context) {
       const body = await request.json();
       const now = new Date().toISOString();
 
-      // gallery_posts 좋아요 수 업데이트: gallery_like_counts 전용 테이블에 저장
+      // gallery_posts 좋아요: 간증과 같이 행 컬럼 + 기존 side table 동시 반영
       if (table === 'gallery_posts' && (body.likes !== undefined || body.likeCount !== undefined)) {
         const newCount = Math.max(0, Number(body.likes ?? body.likeCount ?? 0));
-        await ensureGalleryLikeCounts(DB);
-
-        // INSERT OR REPLACE — 항상 안전하게 저장
-        await DB.prepare(
-          `INSERT OR REPLACE INTO gallery_like_counts (post_id, count) VALUES (?, ?)`
-        ).bind(id, newCount).run();
-
-        // 업데이트된 포스트와 좋아요 수를 함께 반환
-        const gpCols = await galleryPostsSelectColumnList(DB);
-        const gpSelectList = gpCols.map((c) => `gp.${c}`).join(', ');
-        const updated = await DB.prepare(
-          `SELECT ${gpSelectList},
-            COALESCE(glc.count, 0) AS likes,
-            COALESCE(glc.count, 0) AS likeCount
-           FROM gallery_posts gp
-           LEFT JOIN gallery_like_counts glc ON gp.id = glc.post_id
-           WHERE gp.id = ?`
-        ).bind(id).first();
-        return corsResponse(JSON.stringify(updated || { id, likes: newCount, likeCount: newCount }));
+        await persistGalleryLikeCount(DB, id, newCount);
+        const updated = await DB.prepare(`SELECT * FROM gallery_posts WHERE id = ?`).bind(id).first();
+        return corsResponse(JSON.stringify(normalizeGalleryPostRow(updated || { id, likes: newCount, likeCount: newCount })));
       }
 
       // 일반 필드 업데이트 (설명 수정 등)
@@ -132,18 +97,9 @@ export async function onRequest(context) {
       ).bind(...values).run();
 
       if (table === 'gallery_posts') {
-        await ensureGalleryLikeCounts(DB);
-        const gpCols = await galleryPostsSelectColumnList(DB);
-        const gpSelectList = gpCols.map((c) => `gp.${c}`).join(', ');
-        const updated = await DB.prepare(
-          `SELECT ${gpSelectList},
-            COALESCE(glc.count, 0) AS likes,
-            COALESCE(glc.count, 0) AS likeCount
-           FROM gallery_posts gp
-           LEFT JOIN gallery_like_counts glc ON gp.id = glc.post_id
-           WHERE gp.id = ?`
-        ).bind(id).first();
-        return corsResponse(JSON.stringify(updated || { id, ...body, updated_at: now }));
+        await ensureGalleryLikeCountsTable(DB);
+        const updated = await DB.prepare(`SELECT * FROM gallery_posts WHERE id = ?`).bind(id).first();
+        return corsResponse(JSON.stringify(normalizeGalleryPostRow(updated || { id, ...body, updated_at: now })));
       }
 
       const updated = await DB.prepare(`SELECT * FROM ${table} WHERE id = ?`).bind(id).first();

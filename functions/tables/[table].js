@@ -1,6 +1,11 @@
 // Cloudflare Pages Function: /tables/:table
 // Handles GET (list) and POST (create) for D1 tables
 
+import {
+  syncSideTableCountsIntoGalleryPosts,
+  normalizeGalleryPostRow,
+} from '../../_utils/galleryLike.js';
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
@@ -17,31 +22,6 @@ function corsResponse(body, status = 200, extra = {}) {
 
 function generateUUID() {
   return crypto.randomUUID();
-}
-
-// gallery_like_counts 테이블 초기화 및 기존 데이터 마이그레이션
-async function ensureGalleryLikeCounts(DB) {
-  await DB.prepare(
-    `CREATE TABLE IF NOT EXISTS gallery_like_counts (
-      post_id TEXT PRIMARY KEY,
-      count INTEGER DEFAULT 0
-    )`
-  ).run();
-  // gallery_posts.likes 컬럼에 저장된 기존 카운트 한 번만 이전
-  try {
-    await DB.prepare(
-      `INSERT OR IGNORE INTO gallery_like_counts (post_id, count)
-       SELECT id, COALESCE(likes, 0) FROM gallery_posts WHERE COALESCE(likes, 0) > 0`
-    ).run();
-  } catch (_) {}
-}
-
-// gp.* 에 포함된 구 likes 컬럼(0으로 남는 경우가 많음)이 JOIN 결과와 키가 겹치면
-// D1/JSON에서 잘못된 값이 선택될 수 있어, 물리 컬럼 likes/likeCount 는 제외한다.
-async function galleryPostsSelectColumnList(DB) {
-  const colInfo = await DB.prepare(`PRAGMA table_info(gallery_posts)`).all();
-  const names = (colInfo.results || []).map((c) => c.name);
-  return names.filter((n) => n !== 'likes' && n !== 'likeCount');
 }
 
 export async function onRequest(context) {
@@ -87,30 +67,26 @@ export async function onRequest(context) {
       }
 
       if (table === 'gallery_posts') {
-        // gallery_like_counts 테이블에서 좋아요 수를 JOIN으로 가져옴
-        await ensureGalleryLikeCounts(DB);
+        await syncSideTableCountsIntoGalleryPosts(DB);
 
         const countResult = await DB.prepare(`SELECT COUNT(*) as total FROM gallery_posts`).first();
         const total = countResult ? countResult.total : 0;
 
-        const gpCols = await galleryPostsSelectColumnList(DB);
-        const gpSelectList = gpCols.map((c) => `gp.${c}`).join(', ');
-        let orderExpr = `gp.${orderByCol}`;
+        let orderExpr = orderByCol;
         if (orderByCol === 'likes' || orderByCol === 'likeCount') {
-          orderExpr = 'COALESCE(glc.count, 0)';
+          orderExpr = 'COALESCE(likeCount, likes, 0)';
         }
 
         const rows = await DB.prepare(
-          `SELECT ${gpSelectList},
-            COALESCE(glc.count, 0) AS likes,
-            COALESCE(glc.count, 0) AS likeCount
-           FROM gallery_posts gp
-           LEFT JOIN gallery_like_counts glc ON gp.id = glc.post_id
-           ORDER BY ${orderExpr} ${orderByDir} LIMIT ? OFFSET ?`
-        ).bind(limit, offset).all();
+          `SELECT * FROM gallery_posts ORDER BY ${orderExpr} ${orderByDir} LIMIT ? OFFSET ?`
+        )
+          .bind(limit, offset)
+          .all();
+
+        const data = (rows.results || []).map((r) => normalizeGalleryPostRow(r));
 
         return corsResponse(JSON.stringify({
-          data: rows.results || [],
+          data,
           total,
           page,
           limit,
@@ -165,7 +141,7 @@ export async function onRequest(context) {
 
       // gallery_posts 신규 등록 시 likes/likeCount = 0 보장
       if (table === 'gallery_posts' && created) {
-        return corsResponse(JSON.stringify({ ...created, likes: 0, likeCount: 0 }), 201);
+        return corsResponse(JSON.stringify(normalizeGalleryPostRow(created)), 201);
       }
 
       return corsResponse(JSON.stringify(created || insertData), 201);
