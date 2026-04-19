@@ -40,13 +40,17 @@ export async function onRequest(context) {
     return corsResponse(JSON.stringify({ error: 'Database not configured' }), 500);
   }
 
-  // gallery_posts 테이블에 likes 컬럼 자동 추가 (없을 경우)
+  // gallery_posts 테이블에 likes 컬럼 자동 추가 및 likeCount → likes 마이그레이션
   if (table === 'gallery_posts') {
     try {
       const colInfo = await DB.prepare('PRAGMA table_info(gallery_posts)').all();
       const cols = (colInfo.results || []).map(c => c.name);
       if (!cols.includes('likes')) {
         await DB.prepare('ALTER TABLE gallery_posts ADD COLUMN likes INTEGER DEFAULT 0').run();
+      }
+      // 기존 likeCount 컬럼 값을 likes로 복사 (한 번만 실행)
+      if (cols.includes('likeCount') && cols.includes('likes')) {
+        await DB.prepare('UPDATE gallery_posts SET likes = likeCount WHERE likes = 0 AND likeCount > 0').run();
       }
     } catch (_) {}
   }

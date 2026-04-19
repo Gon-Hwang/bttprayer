@@ -2699,7 +2699,7 @@ function renderGalleryPosts() {
         const isProcessing = galleryLikeInFlight.has(post.id);
         const likeBtnClass = `action-button like-btn gallery-like-btn${hasLiked ? ' liked' : ''}`;
         const heartIcon = hasLiked ? 'fas fa-heart' : 'far fa-heart';
-        const likeCount = Number(post.likeCount || 0);
+        const likeCount = Number(post.likes ?? post.likeCount ?? 0);
         const likeCountLabel = escapeHtml(`${likeCount} ${t.gallery_like_count_suffix}`);
 
         const galleryImagesPayload = encodeURIComponent(JSON.stringify(imageUrls));
@@ -2759,17 +2759,17 @@ async function likeGalleryPost(postId) {
     try {
         const likedItems = getUserActionList('likedGalleryPostsByUser', currentUserKey);
         const hasLiked = likedItems.includes(postId);
-        const currentCount = Number(targetPost.likeCount || 0);
+        const currentCount = Number(targetPost.likes ?? targetPost.likeCount ?? 0);
         const newCount = hasLiked ? Math.max(0, currentCount - 1) : currentCount + 1;
 
         if (targetPost.localOnly) {
-            targetPost.likeCount = newCount;
+            targetPost.likes = newCount;
             const nextLikedItems = hasLiked
                 ? likedItems.filter((itemId) => itemId !== postId)
                 : [...likedItems, postId];
             saveUserActionList('likedGalleryPostsByUser', currentUserKey, nextLikedItems);
             const localPosts = getLocalGalleryPosts().map((post) => (
-                String(post.id) === String(postId) ? { ...post, likeCount: newCount } : post
+                String(post.id) === String(postId) ? { ...post, likes: newCount } : post
             ));
             saveLocalGalleryPosts(localPosts);
             renderGalleryPosts();
@@ -2782,7 +2782,7 @@ async function likeGalleryPost(postId) {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ likeCount: newCount })
+            body: JSON.stringify({ likes: newCount })
         });
 
         if (!response.ok) {
@@ -2791,7 +2791,7 @@ async function likeGalleryPost(postId) {
             throw new Error(`좋아요 업데이트 실패 (${response.status})${errorBody ? `: ${errorBody}` : ''}`);
         }
 
-        targetPost.likeCount = newCount;
+        targetPost.likes = newCount;
         const nextLikedItems = hasLiked
             ? likedItems.filter((itemId) => itemId !== postId)
             : [...likedItems, postId];
