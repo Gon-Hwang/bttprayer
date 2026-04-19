@@ -1911,7 +1911,9 @@ async function loadPrayers() {
 async function renderPrayers() {
     const prayerList = document.getElementById('prayerList');
     const t = translations[currentLanguage];
-    
+
+    currentPrayers.sort((a, b) => new Date(b.created_at || b.date || 0).getTime() - new Date(a.created_at || a.date || 0).getTime());
+
     if (currentPrayers.length === 0) {
         prayerList.innerHTML = `<div class="loading">${t.prayers_empty}</div>`;
         return;
@@ -2125,7 +2127,9 @@ async function loadTestimonies() {
 async function renderTestimonies() {
     const testimonyList = document.getElementById('testimonyList');
     const t = translations[currentLanguage];
-    
+
+    currentTestimonies.sort((a, b) => new Date(b.created_at || b.date || 0).getTime() - new Date(a.created_at || a.date || 0).getTime());
+
     if (currentTestimonies.length === 0) {
         testimonyList.innerHTML = `<div class="loading">${t.testimonies_empty}</div>`;
         return;
@@ -3334,7 +3338,9 @@ async function loadNotices() {
 async function renderNotices() {
     const noticeList = document.getElementById('noticeList');
     const t = translations[currentLanguage];
-    
+
+    currentNotices.sort((a, b) => new Date(b.created_at || b.date || 0).getTime() - new Date(a.created_at || a.date || 0).getTime());
+
     if (currentNotices.length === 0) {
         noticeList.innerHTML = `<div class="loading">${t.notices_empty}</div>`;
         return;
