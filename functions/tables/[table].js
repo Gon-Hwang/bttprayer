@@ -19,6 +19,23 @@ function generateUUID() {
   return crypto.randomUUID();
 }
 
+// gallery_like_counts 테이블 초기화 및 기존 데이터 마이그레이션
+async function ensureGalleryLikeCounts(DB) {
+  await DB.prepare(
+    `CREATE TABLE IF NOT EXISTS gallery_like_counts (
+      post_id TEXT PRIMARY KEY,
+      count INTEGER DEFAULT 0
+    )`
+  ).run();
+  // gallery_posts.likes 컬럼에 저장된 기존 카운트 한 번만 이전
+  try {
+    await DB.prepare(
+      `INSERT OR IGNORE INTO gallery_like_counts (post_id, count)
+       SELECT id, COALESCE(likes, 0) FROM gallery_posts WHERE COALESCE(likes, 0) > 0`
+    ).run();
+  } catch (_) {}
+}
+
 export async function onRequest(context) {
   const { request, params, env } = context;
   const table = params.table;
@@ -40,21 +57,6 @@ export async function onRequest(context) {
     return corsResponse(JSON.stringify({ error: 'Database not configured' }), 500);
   }
 
-  // gallery_posts 테이블에 likes 컬럼 자동 추가 및 likeCount → likes 마이그레이션
-  if (table === 'gallery_posts') {
-    try {
-      const colInfo = await DB.prepare('PRAGMA table_info(gallery_posts)').all();
-      const cols = (colInfo.results || []).map(c => c.name);
-      if (!cols.includes('likes')) {
-        await DB.prepare('ALTER TABLE gallery_posts ADD COLUMN likes INTEGER DEFAULT 0').run();
-      }
-      // 기존 likeCount 컬럼 값을 likes로 복사 (한 번만 실행)
-      if (cols.includes('likeCount') && cols.includes('likes')) {
-        await DB.prepare('UPDATE gallery_posts SET likes = likeCount WHERE likes = 0 AND likeCount > 0').run();
-      }
-    } catch (_) {}
-  }
-
   try {
     if (method === 'GET') {
       // Parse query params
@@ -65,16 +67,42 @@ export async function onRequest(context) {
       const offset = (page - 1) * limit;
 
       // Parse sort
-      let orderBy = 'created_at DESC';
+      let orderByCol = 'created_at';
+      let orderByDir = 'DESC';
       if (sortParam) {
         const desc = sortParam.startsWith('-');
         const col = desc ? sortParam.slice(1) : sortParam;
-        // Validate column name (alphanumeric + underscore only)
         if (/^[a-zA-Z0-9_]+$/.test(col)) {
-          orderBy = `${col} ${desc ? 'DESC' : 'ASC'}`;
+          orderByCol = col;
+          orderByDir = desc ? 'DESC' : 'ASC';
         }
       }
 
+      if (table === 'gallery_posts') {
+        // gallery_like_counts 테이블에서 좋아요 수를 JOIN으로 가져옴
+        await ensureGalleryLikeCounts(DB);
+
+        const countResult = await DB.prepare(`SELECT COUNT(*) as total FROM gallery_posts`).first();
+        const total = countResult ? countResult.total : 0;
+
+        const rows = await DB.prepare(
+          `SELECT gp.*, COALESCE(glc.count, 0) as likes, COALESCE(glc.count, 0) as likeCount
+           FROM gallery_posts gp
+           LEFT JOIN gallery_like_counts glc ON gp.id = glc.post_id
+           ORDER BY gp.${orderByCol} ${orderByDir} LIMIT ? OFFSET ?`
+        ).bind(limit, offset).all();
+
+        return corsResponse(JSON.stringify({
+          data: rows.results || [],
+          total,
+          page,
+          limit,
+          table,
+        }));
+      }
+
+      // 일반 테이블
+      const orderBy = `${orderByCol} ${orderByDir}`;
       const countResult = await DB.prepare(`SELECT COUNT(*) as total FROM ${table}`).first();
       const total = countResult ? countResult.total : 0;
 
@@ -117,6 +145,12 @@ export async function onRequest(context) {
 
       // Return the created record
       const created = await DB.prepare(`SELECT * FROM ${table} WHERE id = ?`).bind(id).first();
+
+      // gallery_posts 신규 등록 시 likes/likeCount = 0 보장
+      if (table === 'gallery_posts' && created) {
+        return corsResponse(JSON.stringify({ ...created, likes: 0, likeCount: 0 }), 201);
+      }
+
       return corsResponse(JSON.stringify(created || insertData), 201);
 
     } else {

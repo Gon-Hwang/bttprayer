@@ -15,6 +15,16 @@ function corsResponse(body, status = 200) {
   });
 }
 
+// gallery_like_counts 테이블 초기화
+async function ensureGalleryLikeCounts(DB) {
+  await DB.prepare(
+    `CREATE TABLE IF NOT EXISTS gallery_like_counts (
+      post_id TEXT PRIMARY KEY,
+      count INTEGER DEFAULT 0
+    )`
+  ).run();
+}
+
 export async function onRequest(context) {
   const { request, params, env } = context;
   const table = params.table;
@@ -37,23 +47,20 @@ export async function onRequest(context) {
     return corsResponse(JSON.stringify({ error: 'Database not configured' }), 500);
   }
 
-  // gallery_posts 테이블에 likes 컬럼 자동 추가 및 likeCount → likes 마이그레이션
-  if (table === 'gallery_posts') {
-    try {
-      const colInfo = await DB.prepare('PRAGMA table_info(gallery_posts)').all();
-      const cols = (colInfo.results || []).map(c => c.name);
-      if (!cols.includes('likes')) {
-        await DB.prepare('ALTER TABLE gallery_posts ADD COLUMN likes INTEGER DEFAULT 0').run();
-      }
-      // 기존 likeCount 컬럼 값을 likes로 복사 (한 번만 실행)
-      if (cols.includes('likeCount') && cols.includes('likes')) {
-        await DB.prepare('UPDATE gallery_posts SET likes = likeCount WHERE likes = 0 AND likeCount > 0').run();
-      }
-    } catch (_) {}
-  }
-
   try {
     if (method === 'GET') {
+      if (table === 'gallery_posts') {
+        await ensureGalleryLikeCounts(DB);
+        const row = await DB.prepare(
+          `SELECT gp.*, COALESCE(glc.count, 0) as likes, COALESCE(glc.count, 0) as likeCount
+           FROM gallery_posts gp
+           LEFT JOIN gallery_like_counts glc ON gp.id = glc.post_id
+           WHERE gp.id = ?`
+        ).bind(id).first();
+        if (!row) return corsResponse(JSON.stringify({ error: 'Record not found' }), 404);
+        return corsResponse(JSON.stringify(row));
+      }
+
       const row = await DB.prepare(`SELECT * FROM ${table} WHERE id = ?`).bind(id).first();
       if (!row) {
         return corsResponse(JSON.stringify({ error: 'Record not found' }), 404);
@@ -64,14 +71,38 @@ export async function onRequest(context) {
       const body = await request.json();
       const now = new Date().toISOString();
 
-      // Get column info
+      // gallery_posts 좋아요 수 업데이트: gallery_like_counts 전용 테이블에 저장
+      if (table === 'gallery_posts' && (body.likes !== undefined || body.likeCount !== undefined)) {
+        const newCount = Math.max(0, Number(body.likes ?? body.likeCount ?? 0));
+        await ensureGalleryLikeCounts(DB);
+
+        // INSERT OR REPLACE — 항상 안전하게 저장
+        await DB.prepare(
+          `INSERT OR REPLACE INTO gallery_like_counts (post_id, count) VALUES (?, ?)`
+        ).bind(id, newCount).run();
+
+        // 업데이트된 포스트와 좋아요 수를 함께 반환
+        const updated = await DB.prepare(
+          `SELECT gp.*, COALESCE(glc.count, 0) as likes, COALESCE(glc.count, 0) as likeCount
+           FROM gallery_posts gp
+           LEFT JOIN gallery_like_counts glc ON gp.id = glc.post_id
+           WHERE gp.id = ?`
+        ).bind(id).first();
+        return corsResponse(JSON.stringify(updated || { id, likes: newCount, likeCount: newCount }));
+      }
+
+      // 일반 필드 업데이트 (설명 수정 등)
       const colInfo = await DB.prepare(`PRAGMA table_info(${table})`).all();
       const columns = (colInfo.results || []).map(c => c.name);
 
-      // Build update data (exclude id, created_at)
       const updateData = { ...body };
       delete updateData.id;
       delete updateData.created_at;
+      // gallery_posts 좋아요 필드는 위에서 처리했으므로 제외
+      if (table === 'gallery_posts') {
+        delete updateData.likes;
+        delete updateData.likeCount;
+      }
       if (columns.includes('updated_at')) updateData.updated_at = now;
 
       const validCols = Object.keys(updateData).filter(k => columns.includes(k));
@@ -86,6 +117,17 @@ export async function onRequest(context) {
         `UPDATE ${table} SET ${setClauses} WHERE id = ?`
       ).bind(...values).run();
 
+      if (table === 'gallery_posts') {
+        await ensureGalleryLikeCounts(DB);
+        const updated = await DB.prepare(
+          `SELECT gp.*, COALESCE(glc.count, 0) as likes, COALESCE(glc.count, 0) as likeCount
+           FROM gallery_posts gp
+           LEFT JOIN gallery_like_counts glc ON gp.id = glc.post_id
+           WHERE gp.id = ?`
+        ).bind(id).first();
+        return corsResponse(JSON.stringify(updated || { id, ...body, updated_at: now }));
+      }
+
       const updated = await DB.prepare(`SELECT * FROM ${table} WHERE id = ?`).bind(id).first();
       return corsResponse(JSON.stringify(updated || { id, ...body, updated_at: now }));
 
@@ -96,6 +138,14 @@ export async function onRequest(context) {
       }
 
       await DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
+
+      // gallery_like_counts에서도 삭제
+      if (table === 'gallery_posts') {
+        try {
+          await DB.prepare(`DELETE FROM gallery_like_counts WHERE post_id = ?`).bind(id).run();
+        } catch (_) {}
+      }
+
       return corsResponse(JSON.stringify({ message: 'Record deleted successfully', id }));
 
     } else {
