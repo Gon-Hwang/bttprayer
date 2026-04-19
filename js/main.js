@@ -15,10 +15,13 @@ const GALLERY_LAYOUT_STORAGE_KEY = 'galleryLayoutColumns';
 const PWA_INSTALLED_STORAGE_KEY = 'pwaInstalled';
 let installModalResolver = null;
 let isGalleryRemoteAvailable = true;
+/** @type {Record<string, Array<Record<string, unknown>>>} */
+let galleryCommentsByPost = {};
 let confirmModalResolver = null;
 const testimonyLikeInFlight = new Set();
 const prayerClickInFlight = new Set();
 const galleryLikeInFlight = new Set();
+const galleryCommentSubmitInFlight = new Set();
 let galleryLayoutColumns = 1;
 
 // iOS PWA standalone 모드에서 confirm()이 차단되는 문제를 우회하는 커스텀 confirm
@@ -81,9 +84,12 @@ window.fetch = (input, init) => {
         const isPrayerTestimonyPostOrDelete =
             (method === 'POST' && /^(tables\/prayers|tables\/testimonies)$/.test(input)) ||
             (method === 'DELETE' && /^tables\/(prayers|testimonies)\/[^/?#]+$/.test(input));
+        const isGalleryCommentsWrite =
+            /^tables\/gallery_comments(?:\/[^/?#]+)?$/.test(input) &&
+            (method === 'POST' || method === 'DELETE');
 
         // 로컬/LAN에서만 쓰기 요청 기본 차단 (실수로 운영 데이터 변경 방지)
-        if (IS_LOCAL_OR_LAN && API_BASE_URL && method !== 'GET' && !isPrayerToggleEndpoint && !isTestimonyLikeEndpoint && !isGalleryEndpoint && !isNoticeEndpoint && !isPrayerTestimonyPostOrDelete) {
+        if (IS_LOCAL_OR_LAN && API_BASE_URL && method !== 'GET' && !isPrayerToggleEndpoint && !isTestimonyLikeEndpoint && !isGalleryEndpoint && !isNoticeEndpoint && !isPrayerTestimonyPostOrDelete && !isGalleryCommentsWrite) {
             console.warn('[LOCAL SAFETY] 로컬 환경에서 쓰기 요청이 차단되었습니다:', method, input);
             return Promise.reject(new Error('로컬 안전모드: 운영 데이터 쓰기 요청이 차단되었습니다.'));
         }
@@ -348,6 +354,19 @@ const translations = {
         gallery_local_save_success: '사진이 저장되었습니다.',
         gallery_loading: '사진을 불러오는 중...',
         gallery_empty: '아직 등록된 사역 활동 사진이 없습니다. 첫 사진을 올려주세요!',
+        gallery_comment_title: '댓글',
+        gallery_comment_count: '개',
+        gallery_comment_empty: '첫 댓글을 남겨 응원해 주세요.',
+        gallery_comment_placeholder: '응원의 말을 남겨 주세요…',
+        gallery_comment_submit: '댓글 등록',
+        gallery_comment_login_hint: '로그인한 회원만 댓글을 남길 수 있습니다.',
+        gallery_comment_local_hint: '서버에 저장된 글에만 댓글을 남길 수 있습니다.',
+        gallery_comment_posting: '등록 중…',
+        gallery_comment_error: '댓글을 등록하지 못했습니다.',
+        gallery_comment_delete: '삭제',
+        gallery_comment_delete_confirm: '이 댓글을 삭제할까요?',
+        gallery_comment_deleted: '댓글이 삭제되었습니다.',
+        gallery_comment_delete_error: '댓글 삭제에 실패했습니다.',
 
         // 앱 설치 안내 모달
         install_modal_offer_title: '앱 설치 안내',
@@ -537,6 +556,19 @@ const translations = {
         gallery_local_save_success: 'Photo has been saved.',
         gallery_loading: 'Loading photos...',
         gallery_empty: 'No ministry photos yet. Share the first post!',
+        gallery_comment_title: 'Comments',
+        gallery_comment_count: '',
+        gallery_comment_empty: 'Be the first to leave an encouraging comment.',
+        gallery_comment_placeholder: 'Write a short encouraging message…',
+        gallery_comment_submit: 'Post comment',
+        gallery_comment_login_hint: 'Please log in to comment.',
+        gallery_comment_local_hint: 'Comments are available on posts saved to the server.',
+        gallery_comment_posting: 'Posting…',
+        gallery_comment_error: 'Could not post your comment.',
+        gallery_comment_delete: 'Delete',
+        gallery_comment_delete_confirm: 'Delete this comment?',
+        gallery_comment_deleted: 'Comment removed.',
+        gallery_comment_delete_error: 'Could not delete the comment.',
 
         // App install modal
         install_modal_offer_title: 'Install App',
@@ -1312,6 +1344,7 @@ function setupEventListeners() {
     // 사역 사진 갤러리 폼 제출
     document.getElementById('galleryForm').addEventListener('submit', handleGallerySubmit);
     document.getElementById('galleryList').addEventListener('click', handleGalleryListClick);
+    document.getElementById('galleryList').addEventListener('submit', handleGalleryCommentFormSubmit);
     document.getElementById('galleryLayoutToolbar').addEventListener('click', handleGalleryLayoutToolbarClick);
 
     // 갤러리 파일 선택·드롭 (HEIC는 JPEG로 변환 후 처리, 최대 4장)
@@ -2325,6 +2358,7 @@ async function loadGalleryPosts(silent = false) {
 
     if (!isGalleryRemoteAvailable) {
         currentGalleryPosts = getLocalGalleryPosts();
+        galleryCommentsByPost = {};
         renderGalleryPosts();
         return;
     }
@@ -2354,6 +2388,7 @@ async function loadGalleryPosts(silent = false) {
                 return bTime - aTime;
             });
         }
+        await refreshGalleryCommentsCache();
         renderGalleryPosts();
     } catch (error) {
         const errorMessage = String(error && error.message ? error.message : error);
@@ -2364,6 +2399,7 @@ async function loadGalleryPosts(silent = false) {
             console.error('사역 사진 갤러리를 불러오는 중 오류:', error);
         }
         currentGalleryPosts = getLocalGalleryPosts();
+        galleryCommentsByPost = {};
         renderGalleryPosts();
     }
 }
@@ -2398,6 +2434,176 @@ function addLocalGalleryPost(post) {
     const localPosts = getLocalGalleryPosts();
     localPosts.unshift(post);
     saveLocalGalleryPosts(localPosts);
+}
+
+function canDeleteGalleryComment(comment) {
+    if (!currentUser || !comment) return false;
+    if (isUserAdmin(currentUser)) return true;
+    return normalizeEmail(comment.author_email) === normalizeEmail(currentUser.email);
+}
+
+async function reloadGalleryCommentsForPost(postId) {
+    const pid = String(postId);
+    if (!isGalleryRemoteAvailable) {
+        galleryCommentsByPost[pid] = [];
+        return;
+    }
+    try {
+        const res = await fetchWithRetry(
+            `tables/gallery_comments?post_id=${encodeURIComponent(pid)}&limit=200&sort=created_at`
+        );
+        const data = await res.json();
+        galleryCommentsByPost[pid] = data.data || [];
+    } catch (err) {
+        console.warn('[GALLERY COMMENTS]', pid, err);
+        galleryCommentsByPost[pid] = [];
+    }
+}
+
+async function refreshGalleryCommentsCache() {
+    galleryCommentsByPost = {};
+    if (!isGalleryRemoteAvailable) return;
+    const remotePosts = currentGalleryPosts.filter((p) => !p.localOnly);
+    await Promise.all(remotePosts.map((p) => reloadGalleryCommentsForPost(p.id)));
+}
+
+function buildGalleryCommentsBlock(post) {
+    const t = translations[currentLanguage];
+    const pid = String(post.id);
+    const comments = Array.isArray(galleryCommentsByPost[pid]) ? galleryCommentsByPost[pid] : [];
+    const heading =
+        currentLanguage === 'ko'
+            ? `${t.gallery_comment_title} ${comments.length}${t.gallery_comment_count}`
+            : `${comments.length} ${t.gallery_comment_title}`;
+
+    const listItems = comments
+        .map((c) => {
+            const name = escapeHtml(c.author_name || '');
+            const body = escapeHtml(String(c.content || '')).replace(/\n/g, '<br>');
+            const when = c.created_at ? formatDate(c.created_at) : '';
+            const showDel = canDeleteGalleryComment(c);
+            const delBtn = showDel
+                ? `<button type="button" class="gallery-comment-delete" data-comment-id="${escapeHtml(String(c.id))}" data-post-id="${escapeHtml(pid)}" title="${escapeHtml(t.gallery_comment_delete)}"><i class="fas fa-trash-alt"></i></button>`
+                : '';
+            return `
+            <li class="gallery-comment-item">
+                <div class="gallery-comment-avatar" aria-hidden="true">${name.slice(0, 1) || '?'}</div>
+                <div class="gallery-comment-main">
+                    <div class="gallery-comment-meta">
+                        <span class="gallery-comment-author">${name}</span>
+                        <span class="gallery-comment-time">${escapeHtml(when)}</span>
+                        ${delBtn}
+                    </div>
+                    <div class="gallery-comment-body">${body}</div>
+                </div>
+            </li>`;
+        })
+        .join('');
+
+    const listHtml = comments.length
+        ? `<ul class="gallery-comments-list">${listItems}</ul>`
+        : `<p class="gallery-comments-empty"><i class="far fa-comment-dots"></i> ${escapeHtml(t.gallery_comment_empty)}</p>`;
+
+    let composer = '';
+    if (post.localOnly) {
+        composer = `<p class="gallery-comments-hint gallery-comments-hint--muted"><i class="fas fa-info-circle"></i> ${escapeHtml(t.gallery_comment_local_hint)}</p>`;
+    } else if (!getCurrentUserKey()) {
+        composer = `<p class="gallery-comments-hint"><i class="fas fa-lock"></i> ${escapeHtml(t.gallery_comment_login_hint)}</p>`;
+    } else {
+        const busy = galleryCommentSubmitInFlight.has(pid) ? 'disabled' : '';
+        composer = `
+        <form class="gallery-comment-form" data-post-id="${escapeHtml(pid)}">
+            <label class="sr-only" for="gc-${escapeHtml(pid)}">${escapeHtml(t.gallery_comment_placeholder)}</label>
+            <textarea id="gc-${escapeHtml(pid)}" class="gallery-comment-input textarea-field" maxlength="2000" rows="2" placeholder="${escapeHtml(t.gallery_comment_placeholder)}" ${busy}></textarea>
+            <div class="gallery-comment-form-actions">
+                <button type="submit" class="submit-button gallery-comment-submit" ${busy}>
+                    <i class="fas fa-paper-plane"></i> ${escapeHtml(t.gallery_comment_submit)}
+                </button>
+            </div>
+        </form>`;
+    }
+
+    return `
+        <section class="gallery-comments-panel" aria-label="${escapeHtml(t.gallery_comment_title)}">
+            <div class="gallery-comments-head">
+                <h4 class="gallery-comments-title"><i class="fas fa-comments"></i> ${escapeHtml(heading)}</h4>
+            </div>
+            ${listHtml}
+            ${composer}
+        </section>`;
+}
+
+async function handleGalleryCommentFormSubmit(e) {
+    const form = e.target && e.target.closest && e.target.closest('form.gallery-comment-form');
+    if (!form || !document.getElementById('galleryList') || !document.getElementById('galleryList').contains(form)) return;
+    e.preventDefault();
+    const postId = form.dataset.postId;
+    if (!postId) return;
+    const pid = String(postId);
+    const ta = form.querySelector('textarea.gallery-comment-input');
+    const text = ta ? ta.value.trim() : '';
+    const t = translations[currentLanguage];
+    if (!getCurrentUserKey()) {
+        showToast(t.gallery_comment_login_hint);
+        return;
+    }
+    if (!text) return;
+    if (galleryCommentSubmitInFlight.has(pid)) return;
+    galleryCommentSubmitInFlight.add(pid);
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (ta) ta.disabled = true;
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+        const res = await fetch('tables/gallery_comments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                post_id: pid,
+                content: text,
+                author_name: currentUser.name || '회원',
+                author_email: currentUser.email || '',
+                member_id: currentUser.id || null,
+            }),
+        });
+        if (!res.ok) {
+            const errT = await res.text().catch(() => '');
+            throw new Error(errT || res.status);
+        }
+        if (ta) ta.value = '';
+        await reloadGalleryCommentsForPost(pid);
+        renderGalleryPosts();
+        showToast(currentLanguage === 'ko' ? '댓글이 등록되었습니다.' : 'Comment posted.');
+    } catch (err) {
+        console.error('[GALLERY COMMENT]', err);
+        showToast(t.gallery_comment_error);
+    } finally {
+        galleryCommentSubmitInFlight.delete(pid);
+        if (ta) ta.disabled = false;
+        if (submitBtn) submitBtn.disabled = false;
+    }
+}
+
+async function deleteGalleryComment(commentId, postId) {
+    const t = translations[currentLanguage];
+    const pid = String(postId);
+    const cid = String(commentId);
+    const row = (galleryCommentsByPost[pid] || []).find((c) => String(c.id) === cid);
+    if (!row) return;
+    if (!canDeleteGalleryComment(row)) {
+        showToast(t.gallery_comment_delete_error);
+        return;
+    }
+    if (!await showConfirm(t.gallery_comment_delete_confirm)) return;
+    try {
+        const res = await fetch(`tables/gallery_comments/${encodeURIComponent(commentId)}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(String(res.status));
+        await reloadGalleryCommentsForPost(postId);
+        renderGalleryPosts();
+        showToast(t.gallery_comment_deleted);
+    } catch (err) {
+        console.error('[GALLERY COMMENT DELETE]', err);
+        showToast(t.gallery_comment_delete_error);
+    }
 }
 
 function revokeGalleryPreviewUrls() {
@@ -2741,6 +2947,7 @@ function renderGalleryPosts() {
                 <div class="gallery-images">
                     ${imageUrls.map((url, index) => `<div class="gallery-image-wrap"><img src="${url}" alt="gallery-photo-${index + 1}" loading="lazy" data-gallery-index="${index}" onclick="openGalleryLightbox(this)"></div>`).join('')}
                 </div>
+                ${buildGalleryCommentsBlock(post)}
                 <footer class="gallery-item-footer">
                     <div class="post-like-count"><i class="fas fa-heart"></i> <span>${likeCountLabel}</span></div>
                     <div class="item-actions gallery-item-actions">
@@ -2935,6 +3142,13 @@ async function editGalleryPostDescription(postId, isLocalOnly) {
 }
 
 async function handleGalleryListClick(e) {
+    const delCommentBtn = e.target.closest('.gallery-comment-delete');
+    if (delCommentBtn) {
+        const commentId = delCommentBtn.dataset.commentId;
+        const postId = delCommentBtn.dataset.postId;
+        if (commentId && postId) await deleteGalleryComment(commentId, postId);
+        return;
+    }
     const likeBtn = e.target.closest('.gallery-like-btn');
     if (likeBtn) {
         const likeId = likeBtn.dataset.galleryLikeId;

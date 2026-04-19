@@ -5,6 +5,7 @@ import {
   syncSideTableCountsIntoGalleryPosts,
   normalizeGalleryPostRow,
 } from '../_utils/galleryLike.js';
+import { ensureGalleryCommentsTable } from '../_utils/galleryComments.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -35,7 +36,7 @@ export async function onRequest(context) {
   }
 
   // Only allow known tables
-  const ALLOWED_TABLES = ['prayers', 'testimonies', 'members', 'notices', 'gallery_posts', 'schedules', 'dns_records'];
+  const ALLOWED_TABLES = ['prayers', 'testimonies', 'members', 'notices', 'gallery_posts', 'gallery_comments', 'schedules', 'dns_records'];
   if (!ALLOWED_TABLES.includes(table)) {
     return corsResponse(JSON.stringify({ error: 'Table not found' }), 404);
   }
@@ -94,6 +95,43 @@ export async function onRequest(context) {
         }));
       }
 
+      if (table === 'gallery_comments') {
+        await ensureGalleryCommentsTable(DB);
+        const postId = url.searchParams.get('post_id');
+        if (!postId) {
+          return corsResponse(JSON.stringify({ error: 'post_id query parameter required' }), 400);
+        }
+        const sortParamComments = url.searchParams.get('sort') || 'created_at';
+        let orderByColC = 'created_at';
+        let orderByDirC = 'ASC';
+        if (sortParamComments) {
+          const desc = sortParamComments.startsWith('-');
+          const col = desc ? sortParamComments.slice(1) : sortParamComments;
+          if (/^[a-zA-Z0-9_]+$/.test(col)) {
+            orderByColC = col;
+            orderByDirC = desc ? 'DESC' : 'ASC';
+          }
+        }
+        const countResult = await DB.prepare(
+          `SELECT COUNT(*) as total FROM gallery_comments WHERE post_id = ?`
+        )
+          .bind(postId)
+          .first();
+        const total = countResult ? countResult.total : 0;
+        const rows = await DB.prepare(
+          `SELECT * FROM gallery_comments WHERE post_id = ? ORDER BY ${orderByColC} ${orderByDirC} LIMIT ? OFFSET ?`
+        )
+          .bind(postId, limit, offset)
+          .all();
+        return corsResponse(JSON.stringify({
+          data: rows.results || [],
+          total,
+          page,
+          limit,
+          table,
+        }));
+      }
+
       // 일반 테이블
       const orderBy = `${orderByCol} ${orderByDir}`;
       const countResult = await DB.prepare(`SELECT COUNT(*) as total FROM ${table}`).first();
@@ -113,6 +151,35 @@ export async function onRequest(context) {
 
     } else if (method === 'POST') {
       const body = await request.json();
+
+      if (table === 'gallery_comments') {
+        await ensureGalleryCommentsTable(DB);
+        const postId = String(body.post_id || body.postId || '').trim();
+        const content = String(body.content || '').trim();
+        if (!postId || !content) {
+          return corsResponse(JSON.stringify({ error: 'post_id and content required' }), 400);
+        }
+        if (content.length > 2000) {
+          return corsResponse(JSON.stringify({ error: 'content too long (max 2000)' }), 400);
+        }
+        const gp = await DB.prepare(`SELECT id FROM gallery_posts WHERE id = ?`).bind(postId).first();
+        if (!gp) {
+          return corsResponse(JSON.stringify({ error: 'gallery post not found' }), 404);
+        }
+        const id = generateUUID();
+        const now = new Date().toISOString();
+        const authorName = String(body.author_name || body.authorName || '회원').slice(0, 120);
+        const authorEmail = String(body.author_email || body.authorEmail || '').slice(0, 200);
+        const memberId = body.member_id || body.memberId || null;
+        await DB.prepare(
+          `INSERT INTO gallery_comments (id, post_id, member_id, author_name, author_email, content, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+          .bind(id, postId, memberId, authorName, authorEmail, content, now, now)
+          .run();
+        const created = await DB.prepare(`SELECT * FROM gallery_comments WHERE id = ?`).bind(id).first();
+        return corsResponse(JSON.stringify(created || { id, post_id: postId }), 201);
+      }
 
       // Generate ID and timestamps
       const id = generateUUID();

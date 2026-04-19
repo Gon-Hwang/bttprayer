@@ -6,6 +6,7 @@ import {
   normalizeGalleryPostRow,
   ensureGalleryLikeCountsTable,
 } from '../../_utils/galleryLike.js';
+import { ensureGalleryCommentsTable } from '../../_utils/galleryComments.js';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -33,7 +34,7 @@ export async function onRequest(context) {
   }
 
   // Only allow known tables
-  const ALLOWED_TABLES = ['prayers', 'testimonies', 'members', 'notices', 'gallery_posts', 'schedules', 'dns_records'];
+  const ALLOWED_TABLES = ['prayers', 'testimonies', 'members', 'notices', 'gallery_posts', 'gallery_comments', 'schedules', 'dns_records'];
   if (!ALLOWED_TABLES.includes(table)) {
     return corsResponse(JSON.stringify({ error: 'Table not found' }), 404);
   }
@@ -111,14 +112,17 @@ export async function onRequest(context) {
         return corsResponse(JSON.stringify({ error: 'Record not found' }), 404);
       }
 
-      await DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
-
-      // gallery_like_counts에서도 삭제
       if (table === 'gallery_posts') {
+        try {
+          await ensureGalleryCommentsTable(DB);
+          await DB.prepare(`DELETE FROM gallery_comments WHERE post_id = ?`).bind(id).run();
+        } catch (_) {}
         try {
           await DB.prepare(`DELETE FROM gallery_like_counts WHERE post_id = ?`).bind(id).run();
         } catch (_) {}
       }
+
+      await DB.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
 
       return corsResponse(JSON.stringify({ message: 'Record deleted successfully', id }));
 
