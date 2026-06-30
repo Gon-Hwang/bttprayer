@@ -1,11 +1,22 @@
 #!/bin/bash
 
-# GitHub 업로드 스크립트
-# Personal Access Token을 환경변수로 설정
+# GitHub 업로드 스크립트 — 토큰은 프로젝트 루트의 .env 에서 읽습니다.
 
-GITHUB_TOKEN="ghp_kJm8Cu1oBY8kUv6HkA1PSHvJLmK3HxIz7A5X"
-GITHUB_USER="Gon-Hwang"
-GITHUB_REPO="bttprayer"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/.env"
+  set +a
+fi
+
+GITHUB_USER="${GITHUB_USER:-Gon-Hwang}"
+GITHUB_REPO="${GITHUB_REPO:-bttprayer}"
+
+if [ -z "$GITHUB_TOKEN" ] || [ "$GITHUB_TOKEN" = "여기에_토큰_붙여넣기" ]; then
+  echo "❌ .env 파일에 GITHUB_TOKEN을 설정하세요. (.env.example 참고)"
+  exit 1
+fi
 
 echo "🚀 GitHub 저장소에 파일 업로드 시작..."
 
@@ -19,7 +30,7 @@ echo "✅ Git 초기화 완료"
 
 # 원격 저장소 추가 (토큰 포함)
 git remote remove origin 2>/dev/null
-git remote add origin https://${GITHUB_TOKEN}@github.com/${GITHUB_USER}/${GITHUB_REPO}.git
+git remote add origin "https://${GITHUB_TOKEN}@github.com/${GITHUB_USER}/${GITHUB_REPO}.git"
 echo "✅ 원격 저장소 연결 완료"
 
 # 모든 파일 추가

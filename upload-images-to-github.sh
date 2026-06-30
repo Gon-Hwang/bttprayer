@@ -1,10 +1,23 @@
 #!/bin/bash
 
-# GitHub 정보
-GITHUB_TOKEN="ghp_kJm8Cu1oBY8kUv6HkA1PSHvJLmK3HxIz7A5X"
-GITHUB_USER="Gon-Hwang"
-GITHUB_REPO="bttprayer"
-GITHUB_BRANCH="main"
+# GitHub images 업로드 — 토큰은 프로젝트 루트의 .env 에서 읽습니다.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/.env" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "$SCRIPT_DIR/.env"
+  set +a
+fi
+
+GITHUB_USER="${GITHUB_USER:-Gon-Hwang}"
+GITHUB_REPO="${GITHUB_REPO:-bttprayer}"
+GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
+
+if [ -z "$GITHUB_TOKEN" ] || [ "$GITHUB_TOKEN" = "여기에_토큰_붙여넣기" ]; then
+  echo "❌ .env 파일에 GITHUB_TOKEN을 설정하세요. (.env.example 참고)"
+  exit 1
+fi
 
 echo "🖼️  GitHub에 images/ 폴더 업로드 시작..."
 
