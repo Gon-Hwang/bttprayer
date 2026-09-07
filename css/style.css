@@ -617,6 +617,21 @@ section {
     position: relative;
 }
 
+/* 메뉴별 독립 페이지: 한 번에 하나의 섹션만 표시 */
+body.page-nav-mode > section {
+    display: none !important;
+    min-height: calc(100vh - 140px);
+    box-sizing: border-box;
+}
+
+body.page-nav-mode > section.is-active-page {
+    display: block !important;
+}
+
+body.page-nav-mode > section.hero.is-active-page {
+    display: block !important;
+}
+
 .section-title {
     text-align: center;
     font-size: 3rem;

@@ -347,6 +347,7 @@ const translations = {
         nav_prayers: '기도제목',
         nav_testimonies: '간증',
         nav_gallery: '사진갤러리',
+        nav_members: '회원목록',
         nav_notices: '공지사항',
         nav_admin: '관리자',
         
@@ -562,6 +563,7 @@ const translations = {
         nav_prayers: 'Prayer Requests',
         nav_testimonies: 'Testimonies',
         nav_gallery: 'Photo Gallery',
+        nav_members: 'Members',
         nav_notices: 'Notices',
         nav_admin: 'Admin',
         
@@ -768,12 +770,14 @@ const translations = {
 
 // 페이지 로드 시 실행
 document.addEventListener('DOMContentLoaded', function() {
+    document.body.classList.add('page-nav-mode');
     setupPwaInstallPrompt();
     registerServiceWorker();
     loadLanguagePreference();
     checkLoginStatus();
     initializeApp();
     setupEventListeners();
+    setupPageRouting();
     initializeGalleryLayoutControls();
     setupScrollButton();
     setupMobileMenu();
@@ -1038,6 +1042,7 @@ async function applyLanguage(lang) {
     updateTextContent('navPrayers', t.nav_prayers);
     updateTextContent('navTestimonies', t.nav_testimonies);
     updateTextContent('navGallery', t.nav_gallery);
+    updateTextContent('navMembers', t.nav_members);
     updateTextContent('navNotices', t.nav_notices);
     updateTextContent('navAdmin', t.nav_admin);
     
@@ -1357,28 +1362,26 @@ function updateUIForLoggedInUser() {
         const navAdmin = document.getElementById('navAdmin');
         if (navAdmin) navAdmin.style.display = 'block';
         
-        // 관리자 섹션 표시
-        const adminSection = document.getElementById('admin');
-        if (adminSection) adminSection.style.display = 'block';
-        
         // 공지사항 작성 폼 표시
         const noticeFormContainer = document.getElementById('noticeFormContainer');
         if (noticeFormContainer) noticeFormContainer.style.display = 'block';
         
         // 일정 수정 버튼 표시 (관리자 전용)
         updateScheduleAdminControls();
+    } else {
+        const navAdmin = document.getElementById('navAdmin');
+        if (navAdmin) navAdmin.style.display = 'none';
+        const noticeFormContainer = document.getElementById('noticeFormContainer');
+        if (noticeFormContainer) noticeFormContainer.style.display = 'none';
     }
     
-    // 모든 로그인한 사용자: 회원 목록 표시
-    const memberListSection = document.querySelector('.member-list-section');
-    if (memberListSection) memberListSection.style.display = 'block';
-    
-    // 메뉴 표시/숨김
+    // 메뉴 표시/숨김 (페이지 전환은 showPage가 담당)
     const navLogin = document.getElementById('navLogin');
     const navRegister = document.getElementById('navRegister');
     const navPrayers = document.getElementById('navPrayers');
     const navTestimonies = document.getElementById('navTestimonies');
     const navGallery = document.getElementById('navGallery');
+    const navMembers = document.getElementById('navMembers');
     const navNotices = document.getElementById('navNotices');
     
     if (navLogin) navLogin.style.display = 'none';
@@ -1386,27 +1389,8 @@ function updateUIForLoggedInUser() {
     if (navPrayers) navPrayers.style.display = 'block';
     if (navTestimonies) navTestimonies.style.display = 'block';
     if (navGallery) navGallery.style.display = 'block';
+    if (navMembers) navMembers.style.display = 'block';
     if (navNotices) navNotices.style.display = 'block';
-    
-    // 보호된 섹션 표시 (기도제목, 간증, 공지사항)
-    const protectedSections = ['prayers', 'testimonies', 'gallery', 'notices'];
-    protectedSections.forEach(sectionId => {
-        const section = document.getElementById(sectionId);
-        if (section) section.style.display = 'block';
-    });
-    
-    // 로그인/회원가입 섹션 숨김, 회원 목록은 표시
-    const loginSection = document.getElementById('login');
-    const registerSection = document.getElementById('register');
-    const memberListSectionEl = document.getElementById('memberListSection');
-    
-    if (loginSection) loginSection.style.display = 'none';
-    if (registerSection) registerSection.style.display = 'none';
-    if (memberListSectionEl) memberListSectionEl.style.display = 'block';
-    
-    if (loginSection) loginSection.style.display = 'none';
-    if (registerSection) registerSection.style.display = 'none';
-    if (memberListSectionEl) memberListSectionEl.style.display = 'block';
 }
 
 // 로그아웃한 사용자 UI 업데이트
@@ -1425,16 +1409,13 @@ function updateUIForLoggedOutUser() {
     if (adminBadgeDesktop) adminBadgeDesktop.style.display = 'none';
     if (navAdmin) navAdmin.style.display = 'none';
     
-    // 회원 목록 숨김 (로그아웃 상태)
-    const memberListSection = document.querySelector('.member-list-section');
-    if (memberListSection) memberListSection.style.display = 'none';
-    
     // 메뉴 표시/숨김
     const navLogin = document.getElementById('navLogin');
     const navRegister = document.getElementById('navRegister');
     const navPrayers = document.getElementById('navPrayers');
     const navTestimonies = document.getElementById('navTestimonies');
     const navGallery = document.getElementById('navGallery');
+    const navMembers = document.getElementById('navMembers');
     const navNotices = document.getElementById('navNotices');
     
     if (navLogin) navLogin.style.display = 'block';
@@ -1442,26 +1423,14 @@ function updateUIForLoggedOutUser() {
     if (navPrayers) navPrayers.style.display = 'none';
     if (navTestimonies) navTestimonies.style.display = 'none';
     if (navGallery) navGallery.style.display = 'none';
+    if (navMembers) navMembers.style.display = 'none';
     if (navNotices) navNotices.style.display = 'none';
-    
-    // 보호된 섹션 숨김 (기도제목, 간증, 공지사항, 관리자)
-    const protectedSections = ['prayers', 'testimonies', 'gallery', 'notices', 'admin'];
-    protectedSections.forEach(sectionId => {
-        const section = document.getElementById(sectionId);
-        if (section) section.style.display = 'none';
-    });
     
     // 공지사항 작성 폼 숨김
     const noticeFormContainer = document.getElementById('noticeFormContainer');
     if (noticeFormContainer) noticeFormContainer.style.display = 'none';
-    
-    // 로그인, 회원가입 섹션은 표시, 회원 목록은 숨김
-    const loginSection = document.getElementById('login');
-    const registerSection = document.getElementById('register');
-    const memberListSectionEl = document.getElementById('memberListSection');
-    if (loginSection) loginSection.style.display = 'block';
-    if (registerSection) registerSection.style.display = 'block';
-    if (memberListSectionEl) memberListSectionEl.style.display = 'none';
+
+    updateScheduleAdminControls();
 }
 
 // 앱 초기화
@@ -1848,26 +1817,119 @@ async function handleLogout() {
 
 // 네비게이션 클릭 처리
 function handleNavClick(e) {
+    const link = e.target.closest('.nav-link');
+    if (!link) return;
     e.preventDefault();
-    const targetId = e.target.getAttribute('href');
-    
-    // 활성 상태 업데이트
-    document.querySelectorAll('.nav-link').forEach(link => {
-        link.classList.remove('active');
-    });
-    e.target.classList.add('active');
-    
-    // 해당 섹션으로 스크롤
-    scrollToSection(targetId.substring(1));
+    const href = link.getAttribute('href') || '#home';
+    const sectionId = href.startsWith('#') ? href.slice(1) : href;
+    showPage(sectionId || 'home');
 }
 
-// 섹션으로 스크롤
-function scrollToSection(sectionId) {
-    const section = document.getElementById(sectionId);
-    if (section) {
-        section.scrollIntoView({ behavior: 'smooth' });
+const APP_PAGE_IDS = [
+    'home',
+    'about',
+    'schedule',
+    'login',
+    'register',
+    'memberListSection',
+    'prayers',
+    'testimonies',
+    'gallery',
+    'notices',
+    'admin'
+];
+
+const PROTECTED_PAGE_IDS = [
+    'prayers',
+    'testimonies',
+    'gallery',
+    'notices',
+    'admin',
+    'memberListSection'
+];
+
+let isProgrammaticHashChange = false;
+let currentPageId = 'home';
+
+function normalizePageId(sectionId) {
+    const id = (sectionId || '').replace(/^#/, '').trim();
+    if (APP_PAGE_IDS.includes(id)) return id;
+    return 'home';
+}
+
+function resolveAccessiblePageId(sectionId) {
+    let pageId = normalizePageId(sectionId);
+
+    if (PROTECTED_PAGE_IDS.includes(pageId) && !currentUser) {
+        return 'login';
+    }
+    if (pageId === 'admin' && !isUserAdmin(currentUser)) {
+        return currentUser ? 'home' : 'login';
+    }
+    if ((pageId === 'login' || pageId === 'register') && currentUser) {
+        return 'prayers';
+    }
+    return pageId;
+}
+
+// 메뉴별 독립 페이지 표시
+function showPage(sectionId, options = {}) {
+    const { updateHash = true, scrollTop = true } = options;
+    const requestedId = normalizePageId(sectionId);
+    const pageId = resolveAccessiblePageId(requestedId);
+    currentPageId = pageId;
+
+    document.querySelectorAll('body > section').forEach((section) => {
+        section.classList.toggle('is-active-page', section.id === pageId);
+    });
+
+    document.querySelectorAll('.nav-link').forEach((link) => {
+        const href = link.getAttribute('href') || '';
+        link.classList.toggle('active', href === `#${pageId}`);
+    });
+
+    const nextHash = `#${pageId}`;
+    const accessRedirected = requestedId !== pageId;
+    if ((updateHash || accessRedirected) && location.hash !== nextHash) {
+        isProgrammaticHashChange = true;
+        location.hash = pageId;
+        setTimeout(() => {
+            isProgrammaticHashChange = false;
+        }, 0);
+    }
+
+    if (scrollTop) {
+        window.scrollTo({ top: 0, behavior: 'auto' });
     }
 }
+
+// 기존 호출부 호환: 스크롤 대신 페이지 전환
+function scrollToSection(sectionId) {
+    showPage(sectionId);
+}
+
+function setupPageRouting() {
+    const initialPage = normalizePageId((location.hash || '#home').slice(1));
+    showPage(initialPage, { updateHash: !location.hash, scrollTop: false });
+
+    window.addEventListener('hashchange', () => {
+        if (isProgrammaticHashChange) return;
+        showPage((location.hash || '#home').slice(1), { updateHash: false });
+    });
+
+    // 본문 내 #login / #register 등 링크도 페이지 전환
+    document.addEventListener('click', (e) => {
+        const anchor = e.target.closest('a[href^="#"]');
+        if (!anchor || anchor.classList.contains('nav-link')) return;
+        const href = anchor.getAttribute('href') || '';
+        const pageId = href.slice(1);
+        if (!APP_PAGE_IDS.includes(pageId)) return;
+        e.preventDefault();
+        showPage(pageId);
+    });
+}
+
+window.showPage = showPage;
 
 // 회원 로드
 async function loadMembers() {
@@ -5611,7 +5673,7 @@ function updateScheduleAdminControls() {
     console.log('[SCHEDULE] currentUser:', currentUser);
     
     if (adminControls) {
-        if (currentUser && currentUser.isAdmin) {
+        if (currentUser && isUserAdmin(currentUser)) {
             adminControls.style.display = 'block';
             console.log('[SCHEDULE] ✅ 관리자 - 일정 수정 버튼 표시');
         } else {
