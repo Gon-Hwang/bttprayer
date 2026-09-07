@@ -661,6 +661,7 @@ body.page-nav-mode > section.hero.is-active-page {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 2.5rem;
+    margin-top: 4rem;
 }
 
 .about-card {
@@ -725,7 +726,7 @@ body.page-nav-mode > section.hero.is-active-page {
 
 /* 우리가 믿는 것 */
 .believe-section {
-    margin-top: 4.5rem;
+    margin-top: 1rem;
     max-width: 860px;
     margin-left: auto;
     margin-right: auto;
