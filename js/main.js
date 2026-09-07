@@ -365,6 +365,32 @@ const translations = {
         about_card2_desc: '기도 응답의 간증을 나누며 서로의 믿음을 격려하고 하나님의 살아계심을 경험합니다.',
         about_card3_title: '말씀 안에서',
         about_card3_desc: '하나님의 말씀을 묵상하고 나누며 영적으로 성장하는 시간을 가집니다.',
+        believe_title: '우리가 믿는 것',
+        believe_subtitle: 'What We Believe',
+        believe1_title: '1. 하나님의 존재',
+        believe1_body: '우리는 한 분이신 하나님이 계시고 지금도 일하고 계심을 믿으며 영원히 존재하심을 믿는다.',
+        believe1_verse: '“이스라엘아 들으라 우리 하나님 여호와는 오직 유일한 여호와이시니” (신명기 6:4)',
+        believe2_title: '2. 삼위일체',
+        believe2_body: '하나님은 본질에 있어서 하나이시지만 위격에 있어서는 성부, 성자, 성령의 세 위격이심을 믿는다.',
+        believe2_verse: '“아버지와 아들과 성령의 이름으로 세례를 베풀고” (마태복음 28:19)',
+        believe3_title: '3. 성부 하나님',
+        believe3_body: '성부 하나님은 온 우주 만물을 창조하신 창조주 이시며 역사의 주권자이시다.',
+        believe3_verse: '“태초에 하나님이 천지를 창조하시니라” (창세기 1:1)',
+        believe4_title: '4. 성자 하나님',
+        believe4_body: '성자 하나님, 즉 예수님은 성부 하나님의 유일하신 아들이며 동정녀 마리아를 통해 잉태되어 2000년 인간의 몸으로 인간의 땅에 오셨고 우리 인간들의 모든 죄의 죄값을 지시고 대신 형벌을 받으셨으며 단절 되어있었던 하나님과의 화해의 제물이 되셨다. 누구든지 이를 믿고 영접하는 자들은 하나님의 자녀가 되며 영생을 얻고 하나님과 동행하는 삶을 영원히 살게된다.',
+        believe4_verse: '“우리가 아직 죄인 되었을 때에 그리스도께서 우리를 위하여 죽으심으로 하나님께서 우리에 대한 자기의 사랑을 확증하셨느니라” (로마서 5:8)',
+        believe5_title: '5. 성령 하나님',
+        believe5_body: '성령 하나님은 하나님과 예수의 영이며 우리를 돕는 보혜사이시다. 지금도 성령의 은사는 계속되며 성령의 은사는 예수님의 지체들을 유익하게 하는 것이 목적이다. 그러나 무엇보다 사랑이 핵심이다.',
+        believe5_verse: '“보혜사 곧 아버지께서 내 이름으로 보내실 성령 그가 너희에게 모든 것을 가르치시고” (요한복음 14:26)',
+        believe6_title: '6. 성경',
+        believe6_body: '우리는 기록된 하나님 말씀 성경 66권이 진리임을 믿는다. 이 성경은 하나님의 감동으로 사람들을 통해 대신 쓰여졌다. 성경은 하나님의 말씀으로 무오하며 성령의 조명을 받아 모든 사람이 이해할 수 있다.',
+        believe6_verse: '“모든 성경은 하나님의 감동으로 된 것으로 교훈과 책망과 바르게 함과 의로 교육하기에 유익하니” (디모데후서 3:16)',
+        believe7_title: '7. 교회',
+        believe7_body: '우리는 두세 사람이 모인 곳에는 하나님이 함께하심을 믿으며 예수님을 믿고 따르는 자들이 모인 모임이 교회임을 믿는다. 교회의 머리는 예수님이며 교회는 그 지체이다. 교회로 항상 모이는 것을 힘써야 하며 마지막 때가 가까울 수록 그렇게 해야 한다.',
+        believe7_verse: '“두세 사람이 내 이름으로 모인 곳에는 나도 그들 중에 있느니라” (마태복음 18:20)',
+        believe8_title: '8. 예수님의 재림',
+        believe8_body: '우리는 예수님의 다시오심을 믿고 기다린다. 그날은 아버지외에 아무도 모르나 도적같이 심판의 날은 올 것이며 세상의 임금 사탄은 멸망하고 하나님의 백성들은 결국 새하늘과 새땅에서 하나님과 영원히 살게 될 것을 믿는다.',
+        believe8_verse: '“그러나 그 날과 그 때는 아무도 모르나니 하늘의 천사들도, 아들도 모르고 오직 아버지만 아시느니라” (마태복음 24:36)',
         
         // 모임 일정
         schedule_title: '모임 일정',
@@ -581,6 +607,32 @@ const translations = {
         about_card2_desc: 'We share testimonies of answered prayers, encouraging each other\'s faith and experiencing God\'s living presence.',
         about_card3_title: 'In The Word',
         about_card3_desc: 'We meditate and share God\'s Word, growing spiritually together.',
+        believe_title: 'What We Believe',
+        believe_subtitle: '우리가 믿는 것',
+        believe1_title: '1. The Existence of God',
+        believe1_body: 'We believe there is one God who exists eternally and is still at work today.',
+        believe1_verse: '"Hear, O Israel: The LORD our God, the LORD is one." (Deuteronomy 6:4)',
+        believe2_title: '2. The Trinity',
+        believe2_body: 'We believe God is one in essence and three in persons: the Father, the Son, and the Holy Spirit.',
+        believe2_verse: '"baptizing them in the name of the Father and of the Son and of the Holy Spirit" (Matthew 28:19)',
+        believe3_title: '3. God the Father',
+        believe3_body: 'God the Father is the Creator of all things and the sovereign Lord of history.',
+        believe3_verse: '"In the beginning God created the heavens and the earth." (Genesis 1:1)',
+        believe4_title: '4. God the Son',
+        believe4_body: 'Jesus Christ, the only Son of God the Father, was conceived through the Virgin Mary and came in human flesh about 2,000 years ago. He bore the penalty for all our sins and became the sacrifice of reconciliation with God. Whoever believes in Him and receives Him becomes a child of God, receives eternal life, and walks with God forever.',
+        believe4_verse: '"But God demonstrates his own love for us in this: While we were still sinners, Christ died for us." (Romans 5:8)',
+        believe5_title: '5. God the Holy Spirit',
+        believe5_body: 'The Holy Spirit is the Spirit of God and of Jesus, our Helper and Counselor. The gifts of the Spirit continue today for the building up of the body of Christ, and above all, love is central.',
+        believe5_verse: '"But the Advocate, the Holy Spirit, whom the Father will send in my name, will teach you all things..." (John 14:26)',
+        believe6_title: '6. The Bible',
+        believe6_body: 'We believe the 66 books of Scripture are the inspired Word of God and the truth. The Bible is without error as God\'s Word and can be understood by all through the illumination of the Holy Spirit.',
+        believe6_verse: '"All Scripture is God-breathed and is useful for teaching, rebuking, correcting and training in righteousness." (2 Timothy 3:16)',
+        believe7_title: '7. The Church',
+        believe7_body: 'We believe God is present where two or three gather, and that the church is the gathering of those who believe in and follow Jesus. Christ is the head of the church, and we are His body. We should not give up meeting together, especially as the end draws near.',
+        believe7_verse: '"For where two or three gather in my name, there am I with them." (Matthew 18:20)',
+        believe8_title: '8. The Return of Jesus',
+        believe8_body: 'We believe in and wait for the return of Jesus. No one knows that day except the Father. Judgment will come like a thief; Satan will be destroyed, and God\'s people will live forever with Him in the new heaven and new earth.',
+        believe8_verse: '"But about that day or hour no one knows, not even the angels in heaven, nor the Son, but only the Father." (Matthew 24:36)',
         
         // Schedule
         schedule_title: 'Meeting Schedule',
@@ -1064,6 +1116,14 @@ async function applyLanguage(lang) {
         aboutCards[1].querySelector('p').textContent = t.about_card2_desc;
         aboutCards[2].querySelector('h3').textContent = t.about_card3_title;
         aboutCards[2].querySelector('p').textContent = t.about_card3_desc;
+    }
+
+    updateTextContent('believeTitle', t.believe_title);
+    updateTextContent('believeSubtitle', t.believe_subtitle);
+    for (let i = 1; i <= 8; i++) {
+        updateTextContent(`believe${i}Title`, t[`believe${i}_title`]);
+        updateTextContent(`believe${i}Body`, t[`believe${i}_body`]);
+        updateTextContent(`believe${i}Verse`, t[`believe${i}_verse`]);
     }
     
     // 사용자 정보 텍스트 업데이트
