@@ -365,7 +365,7 @@ const translations = {
         about_card2_desc: '기도 응답의 간증을 나누며 서로의 믿음을 격려하고 하나님의 살아계심을 경험합니다.',
         about_card3_title: '말씀 안에서',
         about_card3_desc: '하나님의 말씀을 묵상하고 나누며 영적으로 성장하는 시간을 가집니다.',
-        believe_title: '보좌 앞에서가 믿는 것',
+        believe_title: '보좌 앞에서가<br>믿는 것',
         believe_subtitle: 'What We Believe',
         believe1_title: '1. 하나님의 존재',
         believe1_body: '우리는 한 분이신 하나님이 계시고 지금도 일하고 계심을 믿으며 영원히 존재하심을 믿는다.',
@@ -391,7 +391,7 @@ const translations = {
         believe8_title: '8. 예수님의 재림',
         believe8_body: '우리는 예수님의 다시오심을 믿고 기다린다. 그날은 아버지외에 아무도 모르나 도적같이 심판의 날은 올 것이며 세상의 임금 사탄은 멸망하고 하나님의 백성들은 결국 새하늘과 새땅에서 하나님과 영원히 살게 될 것을 믿는다.',
         believe8_verse: '“그러나 그 날과 그 때는 아무도 모르나니 하늘의 천사들도, 아들도 모르고 오직 아버지만 아시느니라” (마태복음 24:36)',
-        journey_title: '보좌 앞에서가 걸어온 길',
+        journey_title: '보좌 앞에서가<br>걸어온 길',
         journey_subtitle: 'Our Journey',
         journey_p1: '‘보좌 앞에서’는 2005년 보스톤의 한 작은 아파트에서 시작되었습니다. 작은 기도모임으로 시작되어 1년 동안 하나님의 임재 가운데 주님만 바라보는 기도를 시작으로, 많은 유학생들과 이민자분들이 함께하며 한국·미국을 위해 기도하는 중보기도팀으로 성장해 나갔습니다.',
         journey_p2: '작은 아파트에서 부르짖는 부르짖음을 들으신 주님이 이후 보스톤 온누리교회와 하버드대 채플로 기도 공간을 옮겨 주시며 보좌 앞에서의 걸음을 인도하셨습니다.',
@@ -618,8 +618,8 @@ const translations = {
         about_card2_desc: 'We share testimonies of answered prayers, encouraging each other\'s faith and experiencing God\'s living presence.',
         about_card3_title: 'In The Word',
         about_card3_desc: 'We meditate and share God\'s Word, growing spiritually together.',
-        believe_title: 'What Before The Throne Believes',
-        believe_subtitle: '보좌 앞에서가 믿는 것',
+        believe_title: 'What Before The Throne<br>Believes',
+        believe_subtitle: '보좌 앞에서가<br>믿는 것',
         believe1_title: '1. The Existence of God',
         believe1_body: 'We believe there is one God who exists eternally and is still at work today.',
         believe1_verse: '"Hear, O Israel: The LORD our God, the LORD is one." (Deuteronomy 6:4)',
@@ -644,8 +644,8 @@ const translations = {
         believe8_title: '8. The Return of Jesus',
         believe8_body: 'We believe in and wait for the return of Jesus. No one knows that day except the Father. Judgment will come like a thief; Satan will be destroyed, and God\'s people will live forever with Him in the new heaven and new earth.',
         believe8_verse: '"But about that day or hour no one knows, not even the angels in heaven, nor the Son, but only the Father." (Matthew 24:36)',
-        journey_title: 'The Path Before The Throne Has Walked',
-        journey_subtitle: '보좌 앞에서가 걸어온 길',
+        journey_title: 'The Path Before The Throne<br>Has Walked',
+        journey_subtitle: '보좌 앞에서가<br>걸어온 길',
         journey_p1: "'Before The Throne' began in 2005 in a small apartment in Boston. What started as a small prayer gathering grew, through a year of seeking only the Lord in His presence, into an intercessory prayer team where many international students and immigrants prayed together for Korea and the United States.",
         journey_p2: 'The Lord who heard the cries from that small apartment later moved the prayer space to Boston Onnuri Church and the Harvard University Chapel, and continued to lead Before The Throne.',
         journey_p3: 'Afterward He used Before The Throne through MIT prayer walks, participation in Cambodia\'s water festival with evangelism and healing booths, retreats, and intercession for Korean church gatherings—training us in deeper unity and discipleship.',
@@ -1299,8 +1299,8 @@ function getTranslation(key) {
 function updateTextContent(id, text) {
     const element = document.getElementById(id);
     if (element) {
-        // logoTitle은 HTML 태그 허용 (줄바꿈 위해)
-        if (id === 'logoTitle') {
+        // logoTitle / 소개 제목은 HTML 줄바꿈 허용
+        if (id === 'logoTitle' || id === 'believeTitle' || id === 'journeyTitle' || id === 'believeSubtitle' || id === 'journeySubtitle') {
             element.innerHTML = text;
         }
         // a 태그인 경우

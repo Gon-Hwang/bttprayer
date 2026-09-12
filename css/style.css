@@ -738,6 +738,7 @@ body.page-nav-mode > section.hero.is-active-page {
     color: var(--text-dark-blue);
     font-weight: 800;
     margin-bottom: 0.4rem;
+    line-height: 1.35;
 }
 
 .believe-subtitle {
@@ -746,6 +747,7 @@ body.page-nav-mode > section.hero.is-active-page {
     color: var(--text-light);
     letter-spacing: 0.04em;
     margin-bottom: 2.5rem;
+    line-height: 1.45;
 }
 
 .believe-list {
@@ -805,6 +807,7 @@ body.page-nav-mode > section.hero.is-active-page {
     color: var(--text-dark-blue);
     font-weight: 800;
     margin-bottom: 0.4rem;
+    line-height: 1.35;
 }
 
 .journey-subtitle {
@@ -813,6 +816,7 @@ body.page-nav-mode > section.hero.is-active-page {
     color: var(--text-light);
     letter-spacing: 0.04em;
     margin-bottom: 2rem;
+    line-height: 1.45;
 }
 
 .journey-body {
