@@ -365,7 +365,7 @@ const translations = {
         about_card2_desc: '기도 응답의 간증을 나누며 서로의 믿음을 격려하고 하나님의 살아계심을 경험합니다.',
         about_card3_title: '말씀 안에서',
         about_card3_desc: '하나님의 말씀을 묵상하고 나누며 영적으로 성장하는 시간을 가집니다.',
-        believe_title: '우리가 믿는 것',
+        believe_title: '보좌앞에서가 믿는 것',
         believe_subtitle: 'What We Believe',
         believe1_title: '1. 하나님의 존재',
         believe1_body: '우리는 한 분이신 하나님이 계시고 지금도 일하고 계심을 믿으며 영원히 존재하심을 믿는다.',
@@ -391,6 +391,17 @@ const translations = {
         believe8_title: '8. 예수님의 재림',
         believe8_body: '우리는 예수님의 다시오심을 믿고 기다린다. 그날은 아버지외에 아무도 모르나 도적같이 심판의 날은 올 것이며 세상의 임금 사탄은 멸망하고 하나님의 백성들은 결국 새하늘과 새땅에서 하나님과 영원히 살게 될 것을 믿는다.',
         believe8_verse: '“그러나 그 날과 그 때는 아무도 모르나니 하늘의 천사들도, 아들도 모르고 오직 아버지만 아시느니라” (마태복음 24:36)',
+        journey_title: '보좌앞에서가 걸어온 길',
+        journey_subtitle: 'Our Journey',
+        journey_p1: '‘보좌앞에서’는 2005년 보스톤의 한 작은 아파트에서 시작되었습니다. 작은 기도모임으로 시작되어 1년 동안 하나님의 임재 가운데 주님만 바라보는 기도를 시작으로, 많은 유학생들과 이민자분들이 함께하며 한국·미국을 위해 기도하는 중보기도팀으로 성장해 나갔습니다.',
+        journey_p2: '작은 아파트에서 부르짖는 부르짖음을 들으신 주님이 이후 보스톤 온누리교회와 하버드대 채플로 기도 공간을 옮겨 주시며 보좌앞에서의 걸음을 인도하셨습니다.',
+        journey_p3: '이후 MIT 땅밟기 중보기도, 캄보디아 물축제에 참가하여 전도와 병자를 위한 부스 운영, 자체 수련회, 한인교회의 집회 중보기도를 의뢰받아 섬기는 등 보좌앞에서의 사역을 통해 더 하나됨과 제자됨을 훈련시키셨습니다.',
+        journey_p4: '이 기간 동안 보좌앞에서의 걸음을 사랑하시며 기도해주시고 아껴주신 양선태 선교사님(예수전도단~튀르키예), 이기원 목사님(현 온누리교회 서빙고), 하버드대 교회 목사님을 알게 하시며 지경을 넓혀주셨습니다.',
+        journey_p5: '이후 학업을 마친 유학생들은 각 주로, 한국으로 흩어져 교수와 연구자, 자신의 분야에서 전문가로 일하게 하시고, 임집사님은 선교사로 캄보디아로 보내심을 받는 감사한 일들을 이루어가셨습니다.',
+        journey_p6: '리더인 최지연 권사는 2018년부터 보좌앞에서 대전팀을 만들어 매주 한 번씩 모여 기도하며, 영적으로 세워가시는 사역에 헌신하게 하셨습니다.',
+        journey_p7: '2024년, 각 주와 한국으로 흩어진 보스톤 보좌앞에서 팀은 보좌앞에서 글로벌팀으로 매주 한 번씩 온라인으로 서로의 기도제목과 보좌앞에서의 사역, 한국과 미국 다음세대를 위해 기도하며 사역을 계속하고 있고, 대전팀은 2024년 일본 히로시마 침례교회(현지교회)로 기도선교를 다녀오는 은혜를 부어주셨습니다.',
+        journey_p8: '2026년 현재 보좌앞에서는 주 1회 정기 기도모임과 주 2~3회 비정기 연합기도회를 통해 계속 기도로 만나고 있으며, 보좌앞에서 멤버가 아니더라도 기도가 필요한 누구나 비정기 모임에 참석해 함께 기도하는 은혜를 누리고 있습니다.',
+        journey_p9: '21년간 보좌앞에서의 걸음을 가슴에 품으시고 지금까지 인도하신 주님께 모든 영광을 올려드리며, 주님의 꿈이 우리의 꿈이 되고 주님의 비전이 우리의 비전이 되어 사도행전 1장 8절 말씀이 이루어지는 날을 기대하며, 사랑하는 주님과 함께 오늘도 걷고 있습니다.',
         
         // 모임 일정
         schedule_title: '모임 일정',
@@ -607,8 +618,8 @@ const translations = {
         about_card2_desc: 'We share testimonies of answered prayers, encouraging each other\'s faith and experiencing God\'s living presence.',
         about_card3_title: 'In The Word',
         about_card3_desc: 'We meditate and share God\'s Word, growing spiritually together.',
-        believe_title: 'What We Believe',
-        believe_subtitle: '우리가 믿는 것',
+        believe_title: 'What Before The Throne Believes',
+        believe_subtitle: '보좌앞에서가 믿는 것',
         believe1_title: '1. The Existence of God',
         believe1_body: 'We believe there is one God who exists eternally and is still at work today.',
         believe1_verse: '"Hear, O Israel: The LORD our God, the LORD is one." (Deuteronomy 6:4)',
@@ -633,6 +644,17 @@ const translations = {
         believe8_title: '8. The Return of Jesus',
         believe8_body: 'We believe in and wait for the return of Jesus. No one knows that day except the Father. Judgment will come like a thief; Satan will be destroyed, and God\'s people will live forever with Him in the new heaven and new earth.',
         believe8_verse: '"But about that day or hour no one knows, not even the angels in heaven, nor the Son, but only the Father." (Matthew 24:36)',
+        journey_title: 'The Path Before The Throne Has Walked',
+        journey_subtitle: '보좌앞에서가 걸어온 길',
+        journey_p1: "'Before The Throne' began in 2005 in a small apartment in Boston. What started as a small prayer gathering grew, through a year of seeking only the Lord in His presence, into an intercessory prayer team where many international students and immigrants prayed together for Korea and the United States.",
+        journey_p2: 'The Lord who heard the cries from that small apartment later moved the prayer space to Boston Onnuri Church and the Harvard University Chapel, and continued to lead Before The Throne.',
+        journey_p3: 'Afterward He used Before The Throne through MIT prayer walks, participation in Cambodia\'s water festival with evangelism and healing booths, retreats, and intercession for Korean church gatherings—training us in deeper unity and discipleship.',
+        journey_p4: 'During this season He widened our borders by connecting us with Missionary Seontae Yang (YWAM ~ Türkiye), Pastor Kiwon Lee (currently Onnuri Church Servingo), and the pastor of the Harvard University church, who loved, prayed for, and cherished the journey of Before The Throne.',
+        journey_p5: 'Later, students who finished their studies were scattered across the states and back to Korea to serve as professors, researchers, and professionals in their fields, and Deacon Im was gratefully sent as a missionary to Cambodia.',
+        journey_p6: 'Since 2018, leader Elder Jiyeon Choi has been called to form the Before The Throne Daejeon team, gathering weekly to pray and devote herself to the ministry of spiritual building.',
+        journey_p7: 'In 2024, the Boston Before The Throne members scattered across the states and Korea continue as the Before The Throne Global Team, meeting weekly online to pray for one another\'s needs, for Before The Throne, and for the next generation in Korea and the United States. The Daejeon team also received grace to go on a prayer mission to Hiroshima Baptist Church in Japan (a local church) in 2024.',
+        journey_p8: 'As of 2026, Before The Throne continues to meet through a weekly regular prayer gathering and 2–3 irregular united prayer meetings each week. Anyone in need of prayer—even those who are not Before The Throne members—may join the irregular meetings and share in the grace of praying together.',
+        journey_p9: 'For 21 years the Lord has held Before The Throne in His heart and led us to this day. We give Him all the glory, longing for the day when His dream becomes our dream and His vision becomes our vision, when Acts 1:8 is fulfilled—and today again we walk with our beloved Lord.',
         
         // Schedule
         schedule_title: 'Meeting Schedule',
@@ -1124,6 +1146,12 @@ async function applyLanguage(lang) {
         updateTextContent(`believe${i}Title`, t[`believe${i}_title`]);
         updateTextContent(`believe${i}Body`, t[`believe${i}_body`]);
         updateTextContent(`believe${i}Verse`, t[`believe${i}_verse`]);
+    }
+
+    updateTextContent('journeyTitle', t.journey_title);
+    updateTextContent('journeySubtitle', t.journey_subtitle);
+    for (let i = 1; i <= 9; i++) {
+        updateTextContent(`journeyP${i}`, t[`journey_p${i}`]);
     }
     
     // 사용자 정보 텍스트 업데이트

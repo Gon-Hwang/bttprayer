@@ -791,6 +791,57 @@ body.page-nav-mode > section.hero.is-active-page {
     font-style: italic;
 }
 
+/* 보좌앞에서가 걸어온 길 */
+.journey-section {
+    margin-top: 4.5rem;
+    max-width: 860px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.journey-title {
+    text-align: center;
+    font-size: 2.2rem;
+    color: var(--text-dark-blue);
+    font-weight: 800;
+    margin-bottom: 0.4rem;
+}
+
+.journey-subtitle {
+    text-align: center;
+    font-size: 1.05rem;
+    color: var(--text-light);
+    letter-spacing: 0.04em;
+    margin-bottom: 2rem;
+}
+
+.journey-body {
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: 16px;
+    padding: 1.75rem 1.9rem;
+    box-shadow: var(--shadow-card);
+}
+
+.journey-body p {
+    margin: 0 0 1.15rem;
+    color: var(--text-dark);
+    line-height: 1.9;
+    font-size: 1.02rem;
+}
+
+.journey-body p:last-child {
+    margin-bottom: 0;
+}
+
+.journey-closing {
+    margin-top: 1.5rem !important;
+    padding-top: 1.25rem;
+    border-top: 1px solid rgba(124, 111, 214, 0.2);
+    color: var(--text-dark-blue) !important;
+    font-weight: 600;
+}
+
 /* 모임 일정 - 미래적 디자인 */
 .schedule {
     background: transparent;
@@ -3457,6 +3508,7 @@ footer p:first-child {
     .gallery-item,
     .member-card,
     .believe-item,
+    .journey-body,
     .prayer-form-container,
     .testimony-form-container,
     .notice-form-container,
