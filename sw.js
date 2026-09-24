@@ -1,9 +1,9 @@
-const CACHE_NAME = 'bttprayer-cache-v113';
+const CACHE_NAME = 'bttprayer-cache-v114';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/css/style.css?v=2026042118',
-  '/js/main.js?v=2026042118',
+  '/css/style.css?v=2026042119',
+  '/js/main.js?v=2026042119',
   '/favicon.svg?v=2026031001',
   '/app-icon-192.png?v=2026031001',
   '/app-icon-512.png?v=2026031001',
