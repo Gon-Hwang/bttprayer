@@ -114,6 +114,13 @@
         <div class="container">
             <h2 class="section-title">모임 소개</h2>
 
+            <!-- 관리자 전용 수정 버튼 -->
+            <div class="about-admin-controls" id="aboutAdminControls" style="display:none;">
+                <button class="admin-btn edit-btn" type="button" id="aboutEditBtn">
+                    <i class="fas fa-edit"></i> 소개 수정하기
+                </button>
+            </div>
+
             <div class="believe-section" id="believeSection">
                 <h2 class="believe-title" id="believeTitle">보좌 앞에서가<br>믿는 것</h2>
                 <p class="believe-subtitle" id="believeSubtitle">What We Believe</p>
@@ -180,18 +187,99 @@
             <div class="about-content">
                 <div class="about-card">
                     <i class="fas fa-hands"></i>
-                    <h3>함께 기도해요</h3>
-                    <p>매주 한 번, 우리는 함께 모여 서로를 위해, 가족을 위해, 이웃을 위해 기도합니다.</p>
+                    <h3 id="aboutCard1Title">함께 기도해요</h3>
+                    <p id="aboutCard1Body">매주 한 번, 우리는 함께 모여 서로를 위해, 가족을 위해, 이웃을 위해 기도합니다.</p>
                 </div>
                 <div class="about-card">
                     <i class="fas fa-heart"></i>
-                    <h3>서로 격려해요</h3>
-                    <p>기도 응답의 간증을 나누며 서로의 믿음을 격려하고 하나님의 살아계심을 경험합니다.</p>
+                    <h3 id="aboutCard2Title">서로 격려해요</h3>
+                    <p id="aboutCard2Body">기도 응답의 간증을 나누며 서로의 믿음을 격려하고 하나님의 살아계심을 경험합니다.</p>
                 </div>
                 <div class="about-card">
                     <i class="fas fa-book-bible"></i>
-                    <h3>말씀 안에서</h3>
-                    <p>하나님의 말씀을 묵상하고 나누며 영적으로 성장하는 시간을 가집니다.</p>
+                    <h3 id="aboutCard3Title">말씀 안에서</h3>
+                    <p id="aboutCard3Body">하나님의 말씀을 묵상하고 나누며 영적으로 성장하는 시간을 가집니다.</p>
+                </div>
+            </div>
+
+            <!-- 소개 수정 모달 (관리자 전용) -->
+            <div class="modal" id="aboutEditModal" style="display:none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>모임 소개 수정</h3>
+                        <button class="modal-close" type="button" id="aboutModalCloseBtn">&times;</button>
+                    </div>
+                    <form id="aboutEditForm">
+                        <h4 style="margin-top: 1.5rem; margin-bottom: 1rem; color: var(--primary-color);">걸어온 길</h4>
+
+                        <div class="form-group">
+                            <label for="journeyP1Input">1문단</label>
+                            <textarea id="journeyP1Input" class="input-field" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="journeyP2Input">2문단</label>
+                            <textarea id="journeyP2Input" class="input-field" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="journeyP3Input">3문단</label>
+                            <textarea id="journeyP3Input" class="input-field" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="journeyP4Input">4문단</label>
+                            <textarea id="journeyP4Input" class="input-field" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="journeyP5Input">5문단</label>
+                            <textarea id="journeyP5Input" class="input-field" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="journeyP6Input">6문단</label>
+                            <textarea id="journeyP6Input" class="input-field" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="journeyP7Input">7문단</label>
+                            <textarea id="journeyP7Input" class="input-field" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="journeyP8Input">8문단</label>
+                            <textarea id="journeyP8Input" class="input-field" rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="journeyP9Input">맺음말</label>
+                            <textarea id="journeyP9Input" class="input-field" rows="3"></textarea>
+                        </div>
+
+                        <h4 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--primary-color);">소개 카드</h4>
+
+                        <div class="form-group">
+                            <label for="aboutCard1TitleInput">카드 1 제목</label>
+                            <input type="text" id="aboutCard1TitleInput" class="input-field">
+                        </div>
+                        <div class="form-group">
+                            <label for="aboutCard1BodyInput">카드 1 내용</label>
+                            <textarea id="aboutCard1BodyInput" class="input-field" rows="2"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="aboutCard2TitleInput">카드 2 제목</label>
+                            <input type="text" id="aboutCard2TitleInput" class="input-field">
+                        </div>
+                        <div class="form-group">
+                            <label for="aboutCard2BodyInput">카드 2 내용</label>
+                            <textarea id="aboutCard2BodyInput" class="input-field" rows="2"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="aboutCard3TitleInput">카드 3 제목</label>
+                            <input type="text" id="aboutCard3TitleInput" class="input-field">
+                        </div>
+                        <div class="form-group">
+                            <label for="aboutCard3BodyInput">카드 3 내용</label>
+                            <textarea id="aboutCard3BodyInput" class="input-field" rows="2"></textarea>
+                        </div>
+
+                        <div class="form-actions" style="margin-top: 2rem;">
+                            <button type="submit" class="submit-button">소개 저장</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>

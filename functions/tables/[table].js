@@ -36,9 +36,19 @@ export async function onRequest(context) {
   }
 
   // Only allow known tables
-  const ALLOWED_TABLES = ['prayers', 'testimonies', 'members', 'notices', 'gallery_posts', 'gallery_comments', 'schedules', 'dns_records'];
+  const ALLOWED_TABLES = ['prayers', 'testimonies', 'members', 'notices', 'gallery_posts', 'gallery_comments', 'schedules', 'about', 'dns_records'];
   if (!ALLOWED_TABLES.includes(table)) {
     return corsResponse(JSON.stringify({ error: 'Table not found' }), 404);
+  }
+
+  // 모임 소개(about)는 관리자(최지연 권사님)만 수정 가능
+  const ADMIN_EMAIL = 'yeonchoi08@gmail.com';
+  if (table === 'about' && method === 'POST') {
+    const body = await request.clone().json().catch(() => ({}));
+    const actorEmail = String(body.admin_email || '').trim().toLowerCase();
+    if (actorEmail !== ADMIN_EMAIL) {
+      return corsResponse(JSON.stringify({ error: 'Forbidden: admin only' }), 403);
+    }
   }
 
   const DB = env.DB;

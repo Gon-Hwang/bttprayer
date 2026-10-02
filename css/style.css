@@ -3764,6 +3764,14 @@ footer p:first-child {
     z-index: 10;
 }
 
+/* 소개 관리 스타일 */
+.about-admin-controls {
+    text-align: center;
+    margin-bottom: 2rem;
+    position: relative;
+    z-index: 10;
+}
+
 .edit-btn {
     background: linear-gradient(135deg, #ffa751 0%, #ffe259 100%);
     color: #2c4563;

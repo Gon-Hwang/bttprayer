@@ -1456,6 +1456,8 @@ function updateUIForLoggedInUser() {
         
         // 일정 수정 버튼 표시 (관리자 전용)
         updateScheduleAdminControls();
+        // 소개 수정 버튼 표시 (관리자 전용)
+        updateAboutAdminControls();
     } else {
         const navAdmin = document.getElementById('navAdmin');
         if (navAdmin) navAdmin.style.display = 'none';
@@ -1519,13 +1521,16 @@ function updateUIForLoggedOutUser() {
     if (noticeFormContainer) noticeFormContainer.style.display = 'none';
 
     updateScheduleAdminControls();
+    updateAboutAdminControls();
 }
 
 // 앱 초기화
 function initializeApp() {
     // 모임 일정 로드 (모든 사용자가 볼 수 있음)
     loadSchedule();
-    
+    // 모임 소개 로드 (모든 사용자가 볼 수 있음)
+    loadAbout();
+
     // 로그인한 경우에만 보호된 콘텐츠 로드
     if (currentUser) {
         loadPrayers();
@@ -1647,7 +1652,19 @@ function setupEventListeners() {
     } else {
         console.warn('[SETUP] 일정 수정 버튼을 찾을 수 없습니다 (scheduleEditBtn)');
     }
-    
+
+    // 소개 수정 버튼
+    const aboutEditBtn = document.getElementById('aboutEditBtn');
+    if (aboutEditBtn) {
+        aboutEditBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            openAboutEditModal();
+        });
+    } else {
+        console.warn('[SETUP] 소개 수정 버튼을 찾을 수 없습니다 (aboutEditBtn)');
+    }
+
     // 네비게이션 링크 클릭
     document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', handleNavClick);
@@ -5777,4 +5794,165 @@ function updateScheduleAdminControls() {
 window.openScheduleEditModal = openScheduleEditModal;
 window.closeScheduleEditModal = closeScheduleEditModal;
 window.handleScheduleSave = handleScheduleSave;
+
+// ==========================================
+// 모임 소개 (About) 관련 함수 - 관리자(최지연 권사님)만 수정 가능
+// ==========================================
+
+let currentAbout = null;
+
+const ABOUT_JOURNEY_FIELDS = ['journeyP1', 'journeyP2', 'journeyP3', 'journeyP4', 'journeyP5', 'journeyP6', 'journeyP7', 'journeyP8', 'journeyP9'];
+const ABOUT_CARD_FIELDS = ['aboutCard1Title', 'aboutCard1Body', 'aboutCard2Title', 'aboutCard2Body', 'aboutCard3Title', 'aboutCard3Body'];
+
+// 모임 소개 로드
+async function loadAbout() {
+    try {
+        const response = await fetchWithRetry('tables/about?limit=1&sort=-created_at');
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        if (result.data && result.data.length > 0) {
+            currentAbout = result.data[0];
+            await displayAbout(currentAbout);
+        }
+        // 저장된 소개가 없으면 HTML 기본값을 그대로 사용
+    } catch (error) {
+        console.error('[ABOUT] 소개 로드 실패:', error);
+        // 오류가 발생해도 기본 HTML 값을 사용하므로 문제없음
+    }
+}
+
+// 소개 화면에 표시
+async function displayAbout(about) {
+    for (const field of [...ABOUT_JOURNEY_FIELDS, ...ABOUT_CARD_FIELDS]) {
+        const el = document.getElementById(field);
+        if (el && about[field]) {
+            const translatedText = await getTranslatedContent(about[field], currentLanguage);
+            el.textContent = translatedText;
+        }
+    }
+}
+
+// 소개 수정 권한 확인 (관리자만)
+function canEditAbout() {
+    return !!(currentUser && isUserAdmin(currentUser));
+}
+
+// 소개 수정 모달 열기
+function openAboutEditModal() {
+    if (!canEditAbout()) {
+        alert('관리자만 모임 소개를 수정할 수 있습니다.');
+        return;
+    }
+
+    const modal = document.getElementById('aboutEditModal');
+    if (!modal) {
+        alert('모달을 찾을 수 없습니다. 페이지를 새로고침해주세요.');
+        return;
+    }
+
+    for (const field of [...ABOUT_JOURNEY_FIELDS, ...ABOUT_CARD_FIELDS]) {
+        const input = document.getElementById(field + 'Input');
+        if (!input) continue;
+        const sourceValue = currentAbout && currentAbout[field]
+            ? currentAbout[field]
+            : (document.getElementById(field)?.textContent || '');
+        input.value = sourceValue;
+    }
+
+    modal.style.display = 'block';
+
+    const closeBtn = document.getElementById('aboutModalCloseBtn');
+    if (closeBtn) {
+        closeBtn.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeAboutEditModal();
+        };
+    }
+
+    modal.onclick = function(event) {
+        if (event.target === modal) {
+            closeAboutEditModal();
+        }
+    };
+
+    const form = document.getElementById('aboutEditForm');
+    if (form) {
+        form.removeEventListener('submit', handleAboutSave);
+        form.addEventListener('submit', handleAboutSave);
+    }
+}
+
+// 소개 수정 모달 닫기
+function closeAboutEditModal() {
+    const modal = document.getElementById('aboutEditModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// 소개 저장 (관리자만)
+async function handleAboutSave(event) {
+    event.preventDefault();
+
+    if (!canEditAbout()) {
+        alert('관리자만 모임 소개를 수정할 수 있습니다.');
+        return;
+    }
+
+    const aboutData = {
+        updated_by: currentUser.name,
+        admin_email: currentUser.email,
+        date: new Date().toISOString()
+    };
+
+    for (const field of [...ABOUT_JOURNEY_FIELDS, ...ABOUT_CARD_FIELDS]) {
+        const input = document.getElementById(field + 'Input');
+        aboutData[field] = input ? input.value.trim() : '';
+    }
+
+    try {
+        const response = await fetch('tables/about', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(aboutData)
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+        const savedAbout = await response.json();
+        currentAbout = savedAbout;
+
+        await displayAbout(savedAbout);
+        closeAboutEditModal();
+
+        showToast('모임 소개가 성공적으로 저장되었습니다! ✅');
+        alert('모임 소개가 성공적으로 저장되었습니다! ✅');
+
+    } catch (error) {
+        console.error('[ABOUT] 소개 저장 실패:', error);
+        alert(`소개 저장에 실패했습니다.\n\n오류: ${error.message}\n\nF12를 눌러 콘솔에서 상세 내용을 확인하세요.`);
+    }
+}
+
+// 관리자 권한에 따라 소개 수정 버튼 표시/숨김
+function updateAboutAdminControls() {
+    const adminControls = document.getElementById('aboutAdminControls');
+    if (adminControls) {
+        adminControls.style.display = canEditAbout() ? 'block' : 'none';
+    }
+}
+
+// 전역 함수로 등록
+window.openAboutEditModal = openAboutEditModal;
+window.closeAboutEditModal = closeAboutEditModal;
+window.handleAboutSave = handleAboutSave;
 
