@@ -124,6 +124,7 @@
             <div class="believe-section" id="believeSection">
                 <h2 class="believe-title" id="believeTitle">보좌 앞에서가<br>믿는 것</h2>
                 <p class="believe-subtitle" id="believeSubtitle">What We Believe</p>
+                <div id="believeContent">
                 <ol class="believe-list">
                     <li class="believe-item">
                         <h3 id="believe1Title">1. 하나님의 존재</h3>
@@ -166,12 +167,13 @@
                         <blockquote id="believe8Verse">“그러나 그 날과 그 때는 아무도 모르나니 하늘의 천사들도, 아들도 모르고 오직 아버지만 아시느니라” (마태복음 24:36)</blockquote>
                     </li>
                 </ol>
+                </div>
             </div>
 
             <div class="journey-section" id="journeySection">
                 <h2 class="journey-title" id="journeyTitle">보좌 앞에서가<br>걸어온 길</h2>
                 <p class="journey-subtitle" id="journeySubtitle">Our Journey</p>
-                <div class="journey-body">
+                <div class="journey-body" id="journeyContent">
                     <p id="journeyP1">‘보좌 앞에서’는 2005년 보스톤의 한 작은 아파트에서 시작되었습니다. 작은 기도모임으로 시작되어 1년 동안 하나님의 임재 가운데 주님만 바라보는 기도를 시작으로, 많은 유학생들과 이민자분들이 함께하며 한국·미국을 위해 기도하는 중보기도팀으로 성장해 나갔습니다.</p>
                     <p id="journeyP2">작은 아파트에서 부르짖는 부르짖음을 들으신 주님이 이후 보스톤 온누리교회와 하버드대 채플로 기도 공간을 옮겨 주시며 보좌 앞에서의 걸음을 인도하셨습니다.</p>
                     <p id="journeyP3">이후 MIT 땅밟기 중보기도, 캄보디아 물축제에 참가하여 전도와 병자를 위한 부스 운영, 자체 수련회, 한인교회의 집회 중보기도를 의뢰받아 섬기는 등 보좌 앞에서의 사역을 통해 더 하나됨과 제자됨을 훈련시키셨습니다.</p>
@@ -210,70 +212,14 @@
                         <button class="modal-close" type="button" id="aboutModalCloseBtn">&times;</button>
                     </div>
                     <form id="aboutEditForm">
-                        <h4 style="margin-top: 1.5rem; margin-bottom: 1rem; color: var(--primary-color);">걸어온 길</h4>
-
                         <div class="form-group">
-                            <label for="journeyP1Input">1문단</label>
-                            <textarea id="journeyP1Input" class="input-field" rows="3"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="journeyP2Input">2문단</label>
-                            <textarea id="journeyP2Input" class="input-field" rows="3"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="journeyP3Input">3문단</label>
-                            <textarea id="journeyP3Input" class="input-field" rows="3"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="journeyP4Input">4문단</label>
-                            <textarea id="journeyP4Input" class="input-field" rows="3"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="journeyP5Input">5문단</label>
-                            <textarea id="journeyP5Input" class="input-field" rows="3"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="journeyP6Input">6문단</label>
-                            <textarea id="journeyP6Input" class="input-field" rows="3"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="journeyP7Input">7문단</label>
-                            <textarea id="journeyP7Input" class="input-field" rows="3"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="journeyP8Input">8문단</label>
-                            <textarea id="journeyP8Input" class="input-field" rows="3"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="journeyP9Input">맺음말</label>
-                            <textarea id="journeyP9Input" class="input-field" rows="3"></textarea>
+                            <label for="believeContentInput">보좌 앞에서가 믿는 것</label>
+                            <textarea id="believeContentInput" class="input-field" rows="14" placeholder="문단 사이는 빈 줄로 구분하세요"></textarea>
                         </div>
 
-                        <h4 style="margin-top: 2rem; margin-bottom: 1rem; color: var(--primary-color);">소개 카드</h4>
-
-                        <div class="form-group">
-                            <label for="aboutCard1TitleInput">카드 1 제목</label>
-                            <input type="text" id="aboutCard1TitleInput" class="input-field">
-                        </div>
-                        <div class="form-group">
-                            <label for="aboutCard1BodyInput">카드 1 내용</label>
-                            <textarea id="aboutCard1BodyInput" class="input-field" rows="2"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="aboutCard2TitleInput">카드 2 제목</label>
-                            <input type="text" id="aboutCard2TitleInput" class="input-field">
-                        </div>
-                        <div class="form-group">
-                            <label for="aboutCard2BodyInput">카드 2 내용</label>
-                            <textarea id="aboutCard2BodyInput" class="input-field" rows="2"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="aboutCard3TitleInput">카드 3 제목</label>
-                            <input type="text" id="aboutCard3TitleInput" class="input-field">
-                        </div>
-                        <div class="form-group">
-                            <label for="aboutCard3BodyInput">카드 3 내용</label>
-                            <textarea id="aboutCard3BodyInput" class="input-field" rows="2"></textarea>
+                        <div class="form-group" style="margin-top: 1.5rem;">
+                            <label for="journeyContentInput">걸어온 길</label>
+                            <textarea id="journeyContentInput" class="input-field" rows="14" placeholder="문단 사이는 빈 줄로 구분하세요"></textarea>
                         </div>
 
                         <div class="form-actions" style="margin-top: 2rem;">

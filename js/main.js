@@ -5801,8 +5801,17 @@ window.handleScheduleSave = handleScheduleSave;
 
 let currentAbout = null;
 
-const ABOUT_JOURNEY_FIELDS = ['journeyP1', 'journeyP2', 'journeyP3', 'journeyP4', 'journeyP5', 'journeyP6', 'journeyP7', 'journeyP8', 'journeyP9'];
-const ABOUT_CARD_FIELDS = ['aboutCard1Title', 'aboutCard1Body', 'aboutCard2Title', 'aboutCard2Body', 'aboutCard3Title', 'aboutCard3Body'];
+const ABOUT_FIELDS = ['believeContent', 'journeyContent'];
+
+// 자유 입력 텍스트를 문단(빈 줄 구분)으로 렌더링
+function renderParagraphsHtml(text) {
+    return text
+        .split(/\n\s*\n/)
+        .map(block => block.trim())
+        .filter(block => block.length > 0)
+        .map(block => `<p>${escapeHtml(block).replace(/\n/g, '<br>')}</p>`)
+        .join('');
+}
 
 // 모임 소개 로드
 async function loadAbout() {
@@ -5828,11 +5837,11 @@ async function loadAbout() {
 
 // 소개 화면에 표시
 async function displayAbout(about) {
-    for (const field of [...ABOUT_JOURNEY_FIELDS, ...ABOUT_CARD_FIELDS]) {
+    for (const field of ABOUT_FIELDS) {
         const el = document.getElementById(field);
         if (el && about[field]) {
             const translatedText = await getTranslatedContent(about[field], currentLanguage);
-            el.textContent = translatedText;
+            el.innerHTML = renderParagraphsHtml(translatedText);
         }
     }
 }
@@ -5855,12 +5864,12 @@ function openAboutEditModal() {
         return;
     }
 
-    for (const field of [...ABOUT_JOURNEY_FIELDS, ...ABOUT_CARD_FIELDS]) {
+    for (const field of ABOUT_FIELDS) {
         const input = document.getElementById(field + 'Input');
         if (!input) continue;
         const sourceValue = currentAbout && currentAbout[field]
             ? currentAbout[field]
-            : (document.getElementById(field)?.textContent || '');
+            : (document.getElementById(field)?.innerText || '');
         input.value = sourceValue;
     }
 
@@ -5911,9 +5920,14 @@ async function handleAboutSave(event) {
         date: new Date().toISOString()
     };
 
-    for (const field of [...ABOUT_JOURNEY_FIELDS, ...ABOUT_CARD_FIELDS]) {
+    for (const field of ABOUT_FIELDS) {
         const input = document.getElementById(field + 'Input');
         aboutData[field] = input ? input.value.trim() : '';
+    }
+
+    if (!aboutData.believeContent && !aboutData.journeyContent) {
+        alert('최소한 한 개 이상의 내용을 입력해주세요.');
+        return;
     }
 
     try {
